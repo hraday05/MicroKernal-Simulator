@@ -10,7 +10,11 @@ int main() {
 
     cout << "MicroKernel OS Started...\n";
 
+    kernel.startScheduler();   // 🔥 START CPU
+
     shell.run();
+
+    kernel.stopScheduler();    // 🔥 STOP CPU
 
     return 0;
 }

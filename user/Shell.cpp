@@ -11,7 +11,10 @@ void Shell::run() {
     string command;
 
     while (true) {
+        {
+        std::lock_guard<std::mutex> lock(printMutex);
         cout << ">> ";
+        }
         cin >> command;
 
         if (command == "exit") break;

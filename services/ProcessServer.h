@@ -8,7 +8,10 @@
 struct Process {
     int pid;
     std::string name;
+    int burstTime;
 };
+
+
 
 class ProcessServer {
 private:
@@ -19,6 +22,10 @@ public:
     ProcessServer();
 
     void handleMessage(Message msg);
+
+    Process getLastProcess();
 };
+
+
 
 #endif

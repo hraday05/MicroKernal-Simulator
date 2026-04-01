@@ -2,6 +2,7 @@
 #define SHELL_H
 
 #include "../kernel/Kernel.h"
+#include "../kernel/Globals.h"
 
 class Shell {
 private:
