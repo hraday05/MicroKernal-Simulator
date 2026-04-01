@@ -53,15 +53,47 @@ void MemoryService::handleMessage(Message msg) {
 
     else if (msg.type == "free") {
 
-        int pid = msg.sender;
+    int pid = msg.sender;
 
-        if (memoryMap.find(pid) != memoryMap.end()) {
-            usedMemory -= memoryMap[pid];
-            memoryMap.erase(pid);
+    if (memoryMap.find(pid) == memoryMap.end()) {
+        std::lock_guard<std::mutex> lock(printMutex);
+        cout << "[MemoryService] No memory allocated for PID "
+             << pid << endl;
+        return;
+    }
 
-            std::lock_guard<std::mutex> lock(printMutex);
-            cout << "[MemoryService] Freed memory of PID "
-                 << pid << endl;
-        }
+    int amount;
+
+    try {
+        amount = stoi(msg.data);
+    } catch (...) {
+        std::lock_guard<std::mutex> lock(printMutex);
+        cout << "[MemoryService] Invalid free amount\n";
+        return;
+    }
+
+    amount = min(amount, memoryMap[pid]);
+
+    memoryMap[pid] -= amount;
+    usedMemory -= amount;
+
+    if (memoryMap[pid] == 0) {
+        memoryMap.erase(pid);
+    }
+
+    std::lock_guard<std::mutex> lock(printMutex);
+    cout << "[MemoryService] Freed "
+         << amount << " from PID " << pid << endl;
+ }
+}
+
+void MemoryService::freeAll(int pid) {
+    if (memoryMap.find(pid) != memoryMap.end()) {
+        usedMemory -= memoryMap[pid];
+        memoryMap.erase(pid);
+
+        std::lock_guard<std::mutex> lock(printMutex);
+        cout << "[MemoryService] Auto-freed memory of PID "
+             << pid << endl;
     }
 }

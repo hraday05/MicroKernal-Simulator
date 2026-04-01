@@ -12,6 +12,13 @@ Process ProcessServer::getLastProcess() {
     return processes.back();
 }
 
+bool ProcessServer::processExists(int pid) {
+    for (auto &p : processes) {
+        if (p.pid == pid) return true;
+    }
+    return false;
+}
+
 void ProcessServer::handleMessage(Message msg) {
 
     if (msg.type == "command") {
@@ -46,6 +53,18 @@ void ProcessServer::handleMessage(Message msg) {
         else {
             std::lock_guard<std::mutex> lock(printMutex);
             cout << "[ProcessServer] Unknown command\n";
+        }
+    }
+}
+
+void ProcessServer::removeProcess(int pid) {
+    for (auto it = processes.begin(); it != processes.end(); ++it) {
+        if (it->pid == pid) {
+            processes.erase(it);
+
+            std::lock_guard<std::mutex> lock(printMutex);
+            cout << "[ProcessServer] Removed PID: " << pid << endl;
+            return;
         }
     }
 }

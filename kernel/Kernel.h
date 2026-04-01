@@ -20,6 +20,7 @@ private:
     std::thread schedulerThread;
     std::atomic<bool> running;
     std::mutex printMutex;
+    std::mutex queueMutex;
 
 public:
     Kernel();

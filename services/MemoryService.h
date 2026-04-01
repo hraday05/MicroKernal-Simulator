@@ -9,11 +9,13 @@ private:
     std::map<int, int> memoryMap; // pid -> memory
     int totalMemory;
     int usedMemory;
+    
 
 public:
     MemoryService();
 
     void handleMessage(Message msg);
+    void freeAll(int pid);   // ✅ ADD THIS
 };
 
 #endif

@@ -26,11 +26,33 @@ void Shell::run() {
         msg.receiver = 0;    // Kernel
         if (command.find("alloc") == 0) {
          msg.type = "memory";
-         msg.data = command.substr(6); // number
+
+         stringstream ss(command);
+         string cmd;
+         int amount, pid;
+
+         ss >> cmd >> pid >> amount;
+
+         if (ss.fail()) {
+         cout << "Usage: alloc <amount> <pid>\n";
+         continue;
         }
-        else if (command == "free") {
+
+         msg.data = to_string(amount);
+         msg.sender = pid;   // ✅ IMPORTANT: assign to target process
+        }
+        
+        else if (command.find("free") == 0) {
           msg.type = "free";
-          msg.data = "";
+
+          stringstream ss(command);
+          string cmd;
+          int amount, pid;
+      
+          ss >> cmd >> amount >> pid;
+      
+          msg.data = to_string(amount);
+          msg.sender = pid;
         }
         else {
           msg.type = "command";

@@ -12,6 +12,10 @@ void Scheduler::addProcess(Process p) {
     readyQueue.push(p);
 }
 
+void Scheduler::setProcessServer(ProcessServer* ps) {
+    processServer = ps;
+}
+
 void Scheduler::run() {
 
     if (readyQueue.empty()) {
@@ -36,9 +40,17 @@ void Scheduler::run() {
 
     if (current.burstTime > 0) {
         readyQueue.push(current); // re-add
-    } else {
+    } 
+    else {
         std::lock_guard<std::mutex> lock(printMutex);
         cout << "[Scheduler] Process "
              << current.pid << " finished\n";
+
+        processServer->removeProcess(current.pid);  // 🔥 KEY LINE
+        memoryService->freeAll(current.pid);
     }
+}
+
+void Scheduler::setMemoryService(MemoryService* ms) {
+    memoryService = ms;
 }

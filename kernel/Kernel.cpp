@@ -5,13 +5,17 @@ using namespace std;
 
 Kernel::Kernel() {
     running = false;
+    scheduler.setProcessServer(&processServer);
+    scheduler.setMemoryService(&memoryService);
 }
 
 void Kernel::sendMessage(Message msg) {
+    std::lock_guard<std::mutex> lock(queueMutex);
     messageQueue.push(msg);
 }
 
 void Kernel::processMessages() {
+    std::lock_guard<std::mutex> lock(queueMutex);
     while (!messageQueue.empty()) {
         Message msg = messageQueue.front();
         messageQueue.pop();
@@ -29,12 +33,22 @@ void Kernel::processMessages() {
             scheduler.addProcess(p);
         }
 
-        else if (msg.type == "memory" || msg.type == "free") {
-            memoryService.handleMessage(msg);
+                 else if (msg.type == "memory" || msg.type == "free") {
+                     if (processServer.processExists(msg.sender)) {
+                      memoryService.handleMessage(msg);
+                    } else {
+                      std::lock_guard<std::mutex> lock(printMutex);
+                      cout << "[Kernel] ERROR: PID "
+                           << msg.sender << " does not exist\n";
+                  }
         }
 
-        else {
+        else if (msg.type == "command") {
             processServer.handleMessage(msg);
+        }
+        else {
+            std::lock_guard<std::mutex> lock(printMutex);
+            cout << "[Kernel] Unknown message type\n";
         }
     }
 }
