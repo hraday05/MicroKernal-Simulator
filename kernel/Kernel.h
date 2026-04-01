@@ -4,6 +4,7 @@
 #include <queue>
 #include "../ipc/IPC.h"
 #include "../services/ProcessServer.h"
+#include "../services/MemoryService.h"
 #include <thread>
 #include <atomic>
 #include <mutex>
@@ -13,6 +14,7 @@ class Kernel {
 private:
     std::queue<Message> messageQueue;
     ProcessServer processServer;
+    MemoryService memoryService;
     Scheduler scheduler;
 
     std::thread schedulerThread;

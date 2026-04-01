@@ -22,9 +22,14 @@ void Scheduler::run() {
     readyQueue.pop();
 
     {
-    std::lock_guard<std::mutex> lock(printMutex);
-    cout << "[Scheduler] Running PID: "
+    static int lastPID = -1;
+
+     if (current.pid != lastPID) {
+       std::lock_guard<std::mutex> lock(printMutex);
+       cout << "[Scheduler] Running PID: "
          << current.pid << endl;
+         lastPID = current.pid;
+     }
     }
 
     current.burstTime -= timeQuantum;

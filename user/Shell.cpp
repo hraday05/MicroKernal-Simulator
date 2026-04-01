@@ -15,16 +15,27 @@ void Shell::run() {
         std::lock_guard<std::mutex> lock(printMutex);
         cout << ">> ";
         }
-        cin >> command;
+        kernel->stopScheduler();   // pause background noise
+        getline(cin, command);
+        kernel->startScheduler();  // resume. 
 
         if (command == "exit") break;
 
         Message msg;
         msg.sender = 1;      // Shell PID
         msg.receiver = 0;    // Kernel
-        msg.type = "command";
-        msg.data = command;
-
+        if (command.find("alloc") == 0) {
+         msg.type = "memory";
+         msg.data = command.substr(6); // number
+        }
+        else if (command == "free") {
+          msg.type = "free";
+          msg.data = "";
+        }
+        else {
+          msg.type = "command";
+          msg.data = command;
+        }
         kernel->sendMessage(msg);
         kernel->processMessages();
     }
