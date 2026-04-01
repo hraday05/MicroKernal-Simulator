@@ -12,10 +12,10 @@ void Kernel::processMessages() {
         Message msg = messageQueue.front();
         messageQueue.pop();
 
-        cout << "[Kernel] Routing message from "
-             << msg.sender << " to "
-             << msg.receiver
-             << " | Type: " << msg.type
-             << " | Data: " << msg.data << endl;
+        cout << "[Kernel] Routing message...\n";
+
+        if (msg.data == "create_process" || msg.data == "list_process") {
+          processServer.handleMessage(msg);
+        }
     }
 }

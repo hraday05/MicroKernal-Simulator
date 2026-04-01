@@ -3,10 +3,12 @@
 
 #include <queue>
 #include "../ipc/IPC.h"
+#include "../services/ProcessServer.h"
 
 class Kernel {
 private:
     std::queue<Message> messageQueue;
+    ProcessServer processServer;
 
 public:
     void sendMessage(Message msg);
