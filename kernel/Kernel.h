@@ -1,11 +1,16 @@
 #ifndef KERNEL_H
 #define KERNEL_H
 
-#include <string>
+#include <queue>
+#include "../ipc/IPC.h"
 
 class Kernel {
+private:
+    std::queue<Message> messageQueue;
+
 public:
-    void sendMessage(std::string msg);
+    void sendMessage(Message msg);
+    void processMessages();
 };
 
 #endif

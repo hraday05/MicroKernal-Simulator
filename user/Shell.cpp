@@ -16,6 +16,13 @@ void Shell::run() {
 
         if (command == "exit") break;
 
-        kernel->sendMessage(command);
+        Message msg;
+        msg.sender = 1;      // Shell PID
+        msg.receiver = 0;    // Kernel
+        msg.type = "command";
+        msg.data = command;
+
+        kernel->sendMessage(msg);
+        kernel->processMessages();
     }
 }
