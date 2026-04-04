@@ -5,22 +5,25 @@
 #include "../ipc/IPC.h"
 #include "../services/ProcessServer.h"
 #include "../services/MemoryService.h"
-#include <thread>
+#include "../services/FileService.h"
+#include "../kernel/OS_Thread.h"
 #include <atomic>
-#include <mutex>
-#include "Scheduler.h"
+#include "../kernel/OS_Mutex.h"
+#include "../services/SchedulerService.h"
+#include "../services/SecurityServer.h"
 
 class Kernel {
 private:
-    std::queue<Message> messageQueue;
+    MessageBus messageBus;
     ProcessServer processServer;
     MemoryService memoryService;
-    Scheduler scheduler;
+    FileService fileService;
+    SchedulerService schedulerService;
+    SecurityServer securityServer;
 
-    std::thread schedulerThread;
+    OS_Thread schedulerThread;
     std::atomic<bool> running;
-    std::mutex printMutex;
-    std::mutex queueMutex;
+    OS_Mutex printMutex;
 
 public:
     Kernel();
@@ -30,6 +33,8 @@ public:
 
     void startScheduler();
     void stopScheduler();
+
+    bool isRunning() { return running; }
 };
 
 #endif

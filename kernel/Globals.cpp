@@ -1,3 +1,3 @@
 #include "Globals.h"
 
-std::mutex printMutex;
+OS_Mutex printMutex;

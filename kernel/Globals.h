@@ -1,8 +1,8 @@
 #ifndef GLOBALS_H
 #define GLOBALS_H
 
-#include <mutex>
+#include "OS_Mutex.h"
 
-extern std::mutex printMutex;
+extern OS_Mutex printMutex;
 
 #endif

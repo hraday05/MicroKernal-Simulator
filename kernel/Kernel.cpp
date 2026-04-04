@@ -3,25 +3,25 @@
 
 using namespace std;
 
-Kernel::Kernel() {
+Kernel::Kernel() : schedulerService(&processServer) {
     running = false;
-    scheduler.setProcessServer(&processServer);
-    scheduler.setMemoryService(&memoryService);
+    processServer.setBus(&messageBus);
+    memoryService.setBus(&messageBus);
+    fileService.setBus(&messageBus);
+    schedulerService.setBus(&messageBus);
+    securityServer.setBus(&messageBus);
 }
 
 void Kernel::sendMessage(Message msg) {
-    std::lock_guard<std::mutex> lock(queueMutex);
-    messageQueue.push(msg);
+    messageBus.sendMessage(msg);
 }
 
 void Kernel::processMessages() {
-    std::lock_guard<std::mutex> lock(queueMutex);
-    while (!messageQueue.empty()) {
-        Message msg = messageQueue.front();
-        messageQueue.pop();
+    while (messageBus.hasMessages()) {
+        Message msg = messageBus.receiveMessage();
 
         {
-        std::lock_guard<std::mutex> lock(printMutex);
+        OS_LockGuard lock(printMutex);
         cout << "[Kernel] Routing message...\n";
         }
 
@@ -29,15 +29,15 @@ void Kernel::processMessages() {
             processServer.handleMessage(msg);
 
             // Get last created process
-            Process p = processServer.getLastProcess(); // we add this next
-            scheduler.addProcess(p);
+            PCB p = processServer.getLastProcess();
+            schedulerService.addProcess(p);
         }
 
                  else if (msg.type == "memory" || msg.type == "free") {
                      if (processServer.processExists(msg.sender)) {
                       memoryService.handleMessage(msg);
                     } else {
-                      std::lock_guard<std::mutex> lock(printMutex);
+                      OS_LockGuard lock(printMutex);
                       cout << "[Kernel] ERROR: PID "
                            << msg.sender << " does not exist\n";
                   }
@@ -46,23 +46,46 @@ void Kernel::processMessages() {
         else if (msg.type == "command") {
             processServer.handleMessage(msg);
         }
+        else if (msg.type == "file") {
+            fileService.handleMessage(msg);
+        }
+        else if (msg.type == "interrupt") {
+            schedulerService.handleMessage(msg);
+        }
+        else if (msg.type == "request_capability") {
+            securityServer.handleMessage(msg);
+        }
+        else if (msg.type == "kill_service") {
+            OS_LockGuard lock(printMutex);
+            cout << "[WATCHDOG] CRITICAL FAULT DETECTED: " << msg.data << " crashed!\n";
+            cout << "[WATCHDOG] Restarting " << msg.data << " isolating fault entirely...\n";
+            if (msg.data == "FileService") fileService = FileService();
+        }
         else {
-            std::lock_guard<std::mutex> lock(printMutex);
+            OS_LockGuard lock(printMutex);
             cout << "[Kernel] Unknown message type\n";
         }
     }
+}
+
+DWORD WINAPI KernelSchedulerBody(LPVOID param) {
+    Kernel* k = (Kernel*)param;
+    while (k->isRunning()) {
+        Message interruptMsg;
+        interruptMsg.sender = 0; // Hardware/Kernel
+        interruptMsg.type = "interrupt";
+        interruptMsg.data = "timer";
+        k->sendMessage(interruptMsg);
+        Sleep(1000);
+    }
+    return 0;
 }
 
 void Kernel::startScheduler() {
     if (running) return;   // 🚨 prevent duplicate threads
     running = true;
 
-     schedulerThread = std::thread([this]() {
-        while (running) {
-            scheduler.run();
-            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-        }
-    });
+    schedulerThread.start(KernelSchedulerBody, this);
 }
 
 void Kernel::stopScheduler() {
@@ -72,4 +95,5 @@ void Kernel::stopScheduler() {
         schedulerThread.join();
     }
 }
+
 

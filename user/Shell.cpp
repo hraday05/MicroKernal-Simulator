@@ -1,5 +1,8 @@
 #include <iostream>
+#include <sstream>
+#include "../kernel/OS_Mutex.h"
 #include "Shell.h"
+#include "../kernel/Globals.h"
 
 using namespace std;
 
@@ -12,7 +15,7 @@ void Shell::run() {
 
     while (true) {
         {
-        std::lock_guard<std::mutex> lock(printMutex);
+        OS_LockGuard lock(printMutex);
         cout << ">> ";
         }
         kernel->stopScheduler();   // pause background noise
@@ -26,6 +29,7 @@ void Shell::run() {
         msg.receiver = 0;    // Kernel
         if (command.find("alloc") == 0) {
          msg.type = "memory";
+         msg.capabilityToken = "CAP_MEM";
 
          stringstream ss(command);
          string cmd;
@@ -53,6 +57,18 @@ void Shell::run() {
       
           msg.data = to_string(amount);
           msg.sender = pid;
+        }
+        else if (command.find("create_file") == 0 ||
+                 command.find("read_file") == 0 ||
+                 command.find("delete_file") == 0 ||
+                 command.find("write_file") == 0) {
+            msg.type = "file";
+            msg.data = command;
+            msg.capabilityToken = "CAP_FILE"; // Prove we have the token
+        }
+        else if (command.find("kill_service") == 0) {
+            msg.type = "kill_service";
+            msg.data = "FileService"; 
         }
         else {
           msg.type = "command";

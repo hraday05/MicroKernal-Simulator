@@ -5,17 +5,20 @@
 #include <string>
 #include "../ipc/IPC.h"
 
-struct Process {
+class PCB {
+public:
     int pid;
     std::string name;
     int burstTime;
+    std::string state; // READY, RUNNING, BLOCKED, DEAD
+    std::vector<int> pageTable;
 };
 
+#include "Service.h"
 
-
-class ProcessServer {
+class ProcessServer : public Service {
 private:
-    std::vector<Process> processes;
+    std::vector<PCB> processes;
     int nextPID;
     
 
@@ -24,7 +27,7 @@ public:
 
     void handleMessage(Message msg);
 
-    Process getLastProcess();
+    PCB getLastProcess();
 
     bool processExists(int pid);
 

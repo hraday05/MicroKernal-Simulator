@@ -3,18 +3,19 @@
 
 #include <map>
 #include "../ipc/IPC.h"
+#include "Service.h"
 
-class MemoryService {
+class MemoryService : public Service {
 private:
-    std::map<int, int> memoryMap; // pid -> memory
-    int totalMemory;
-    int usedMemory;
-    
+    std::vector<bool> physicalMemory; // false = free, true = used
+    int pageSize;
+    int totalPages;
+    int usedPages;
 
 public:
     MemoryService();
 
-    void handleMessage(Message msg);
+    void handleMessage(Message msg) override;
     void freeAll(int pid);   // ✅ ADD THIS
 };
 

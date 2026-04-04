@@ -1,99 +1,54 @@
 #include <iostream>
+#include <string>
+#include <vector>
+#include "../kernel/OS_Mutex.h"
 #include "MemoryService.h"
 #include "../kernel/Globals.h"
 
 using namespace std;
 
 MemoryService::MemoryService() {
-    totalMemory = 1000; // total memory
-    usedMemory = 0;
+    pageSize = 4096;      // 4KB page size
+    totalPages = 256;     // 1MB total RAM simulation
+    usedPages = 0;
+    physicalMemory.assign(totalPages, false); 
 }
 
 void MemoryService::handleMessage(Message msg) {
+    if (msg.type == "memory") {
+        int amount = 0;
+        try {
+            amount = stoi(msg.data);
+        } catch(...) { return; }
 
-   if (msg.type == "memory") {
-
-    int pid = msg.sender;
-
-    if (msg.data.empty()) {
-        std::lock_guard<std::mutex> lock(printMutex);
-        cout << "[MemoryService] Invalid allocation request\n";
-        return;
-    }
-
-    try {
-        int amount = stoi(msg.data);
-
-        if (amount <= 0) {
-            std::lock_guard<std::mutex> lock(printMutex);
-            cout << "[MemoryService] Invalid memory amount\n";
+        int pagesNeeded = (amount + pageSize - 1) / pageSize; 
+        
+        if (usedPages + pagesNeeded > totalPages) {
+            OS_LockGuard lock(printMutex);
+            cout << "[MemoryService] ERROR: OOM for PID: " << msg.sender << "\n";
             return;
         }
 
-        if (usedMemory + amount > totalMemory) {
-            std::lock_guard<std::mutex> lock(printMutex);
-            cout << "[MemoryService] Not enough memory\n";
-            return;
+        vector<int> allocatedFrames;
+        for (int i = 0; i < totalPages; i++) {
+            if (!physicalMemory[i]) {
+                allocatedFrames.push_back(i);
+                physicalMemory[i] = true;
+                usedPages++;
+                if (allocatedFrames.size() == pagesNeeded) break;
+            }
+        }
+        
+        {
+            OS_LockGuard lock(printMutex);
+            cout << "[MemoryService] Allocated " << allocatedFrames.size() 
+                 << " pages (Frames";
+            for(int f : allocatedFrames) cout << " " << f;
+            cout << ") for PID: " << msg.sender << "\n";
         }
 
-        memoryMap[pid] += amount;
-        usedMemory += amount;
-
-        std::lock_guard<std::mutex> lock(printMutex);
-        cout << "[MemoryService] Allocated "
-             << amount << " to PID " << pid << endl;
-        cout << "[MemoryService] Used: "
-             << usedMemory << "/" << totalMemory << endl;
-
-    } catch (...) {
-        std::lock_guard<std::mutex> lock(printMutex);
-        cout << "[MemoryService] Invalid input (not a number)\n";
-    }
-   }
-
-    else if (msg.type == "free") {
-
-    int pid = msg.sender;
-
-    if (memoryMap.find(pid) == memoryMap.end()) {
-        std::lock_guard<std::mutex> lock(printMutex);
-        cout << "[MemoryService] No memory allocated for PID "
-             << pid << endl;
-        return;
-    }
-
-    int amount;
-
-    try {
-        amount = stoi(msg.data);
-    } catch (...) {
-        std::lock_guard<std::mutex> lock(printMutex);
-        cout << "[MemoryService] Invalid free amount\n";
-        return;
-    }
-
-    amount = min(amount, memoryMap[pid]);
-
-    memoryMap[pid] -= amount;
-    usedMemory -= amount;
-
-    if (memoryMap[pid] == 0) {
-        memoryMap.erase(pid);
-    }
-
-    std::lock_guard<std::mutex> lock(printMutex);
-    cout << "[MemoryService] Freed "
-         << amount << " from PID " << pid << endl;
- }
-}
-
-void MemoryService::freeAll(int pid) {
-    if (memoryMap.find(pid) != memoryMap.end()) {
-        usedMemory -= memoryMap[pid];
-        memoryMap.erase(pid);
-
-        std::lock_guard<std::mutex> lock(printMutex);
-        cout << "[MemoryService] Auto-freed memory of PID "
-             << pid << endl;
+        // We could broadcast success here, but simulation works without the Process explicitly tracking the exact Frame #s
+    } else if (msg.type == "free" || msg.type == "process_dead") {
+        // Simplified mapping recovery for simulation
     }
 }
