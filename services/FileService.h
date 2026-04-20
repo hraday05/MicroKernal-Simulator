@@ -2,14 +2,15 @@
 #define FILESERVICE_H
 
 #include "../ipc/IPC.h"
-#include <unordered_map>
 #include <string>
 #include "../kernel/OS_Mutex.h"
 #include "Service.h"
 
 class FileService : public Service {
 private:
-    std::unordered_map<std::string, std::string> files;
+    std::string fsDir;                    // directory for persistent storage
+    std::string getPath(const std::string& name);  // builds full path
+    bool fileExists(const std::string& path);
 
 public:
     FileService();
@@ -17,4 +18,3 @@ public:
 };
 
 #endif
-

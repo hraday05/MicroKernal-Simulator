@@ -6,20 +6,39 @@
 #include <queue>
 #include <vector>
 
+// Tracks one scheduling time slot for the Gantt chart
+struct ScheduleEntry {
+    int pid;
+    int startTime;
+    int endTime;
+};
+
 class SchedulerService : public Service {
 private:
     std::queue<PCB> readyQueue;
     int timeQuantum;
     ProcessServer* processServer;
-    PCB currentRunning;          // track which process is currently on the CPU
-    bool hasCurrent;             // true if a process is actively running
+    PCB currentRunning;
+    bool hasCurrent;
+
+    // Execution tracking for visualization
+    std::vector<ScheduleEntry> executionLog;
+    int currentTime;
+    int totalContextSwitches;
+    int totalCompletions;
+
 public:
     SchedulerService(ProcessServer* ps);
     void handleMessage(Message msg) override;
     void addProcess(PCB p);
 
-    // New: return a snapshot of all processes in the scheduler (running + ready queue)
+    // Snapshot for the 'ps' command
     std::vector<PCB> getProcessSnapshot();
+
+    // Visualization & Monitoring
+    void printGanttChart();
+    void printDetailedLog();
+    void printStats();
 };
 
 #endif

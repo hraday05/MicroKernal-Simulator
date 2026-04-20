@@ -28,10 +28,10 @@ void Kernel::processMessages() {
             cout << "[Kernel] Routing message type='" << msg.type << "'...\n";
         }
 
-        if (msg.type == "command" && msg.data == "create_process") {
+        if (msg.type == "command" && msg.data.find("create_process") == 0) {
             processServer.handleMessage(msg);
 
-            // Get last created process
+            // Get last created process and add to scheduler
             PCB p = processServer.getLastProcess();
             schedulerService.addProcess(p);
         }
@@ -54,6 +54,9 @@ void Kernel::processMessages() {
         }
         else if (msg.type == "interrupt") {
             schedulerService.handleMessage(msg);
+        }
+        else if (msg.type == "process_dead") {
+            memoryService.handleMessage(msg);
         }
         else if (msg.type == "request_capability") {
             securityServer.handleMessage(msg);

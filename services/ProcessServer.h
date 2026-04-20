@@ -9,8 +9,9 @@ class PCB {
 public:
     int pid;
     std::string name;
-    int burstTime;
-    std::string state; // READY, RUNNING, BLOCKED, DEAD
+    int burstTime;        // original burst time (never changes)
+    int remainingTime;    // remaining burst for scheduling (decremented each quantum)
+    std::string state;    // READY, RUNNING, BLOCKED, DEAD
     std::vector<int> pageTable;
 };
 
