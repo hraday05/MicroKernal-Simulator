@@ -7,6 +7,7 @@
 class Shell {
 private:
     Kernel* kernel;
+    void printHelp();
 
 public:
     Shell(Kernel* k);

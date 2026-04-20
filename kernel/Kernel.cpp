@@ -1,5 +1,7 @@
 #include <iostream>
 #include "Kernel.h"
+#include "Globals.h"
+#include "OS_Mutex.h"
 
 using namespace std;
 
@@ -20,9 +22,10 @@ void Kernel::processMessages() {
     while (messageBus.hasMessages()) {
         Message msg = messageBus.receiveMessage();
 
-        {
-        OS_LockGuard lock(printMutex);
-        cout << "[Kernel] Routing message...\n";
+        // Only print routing log for user-initiated messages, not background timer ticks
+        if (msg.type != "interrupt") {
+            OS_LockGuard lock(printMutex);
+            cout << "[Kernel] Routing message type='" << msg.type << "'...\n";
         }
 
         if (msg.type == "command" && msg.data == "create_process") {
@@ -33,14 +36,14 @@ void Kernel::processMessages() {
             schedulerService.addProcess(p);
         }
 
-                 else if (msg.type == "memory" || msg.type == "free") {
-                     if (processServer.processExists(msg.sender)) {
-                      memoryService.handleMessage(msg);
-                    } else {
-                      OS_LockGuard lock(printMutex);
-                      cout << "[Kernel] ERROR: PID "
-                           << msg.sender << " does not exist\n";
-                  }
+        else if (msg.type == "memory" || msg.type == "free") {
+            if (processServer.processExists(msg.sender)) {
+                memoryService.handleMessage(msg);
+            } else {
+                OS_LockGuard lock(printMutex);
+                cout << "[Kernel] ERROR: PID "
+                     << msg.sender << " does not exist\n";
+            }
         }
 
         else if (msg.type == "command") {
@@ -59,7 +62,10 @@ void Kernel::processMessages() {
             OS_LockGuard lock(printMutex);
             cout << "[WATCHDOG] CRITICAL FAULT DETECTED: " << msg.data << " crashed!\n";
             cout << "[WATCHDOG] Restarting " << msg.data << " isolating fault entirely...\n";
-            if (msg.data == "FileService") fileService = FileService();
+            if (msg.data == "FileService") {
+                fileService = FileService();
+                fileService.setBus(&messageBus);  // FIX: rebind the message bus!
+            }
         }
         else {
             OS_LockGuard lock(printMutex);
@@ -68,21 +74,27 @@ void Kernel::processMessages() {
     }
 }
 
+// Background thread: sends timer interrupts AND processes all pending messages
 DWORD WINAPI KernelSchedulerBody(LPVOID param) {
     Kernel* k = (Kernel*)param;
     while (k->isRunning()) {
+        // Generate a timer interrupt
         Message interruptMsg;
         interruptMsg.sender = 0; // Hardware/Kernel
         interruptMsg.type = "interrupt";
         interruptMsg.data = "timer";
         k->sendMessage(interruptMsg);
+
+        // Process ALL pending messages (scheduler ticks, etc.)
+        k->processMessages();
+
         Sleep(1000);
     }
     return 0;
 }
 
 void Kernel::startScheduler() {
-    if (running) return;   // 🚨 prevent duplicate threads
+    if (running) return;   // prevent duplicate threads
     running = true;
 
     schedulerThread.start(KernelSchedulerBody, this);
@@ -95,5 +107,3 @@ void Kernel::stopScheduler() {
         schedulerThread.join();
     }
 }
-
-

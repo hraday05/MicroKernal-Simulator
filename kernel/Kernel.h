@@ -23,7 +23,6 @@ private:
 
     OS_Thread schedulerThread;
     std::atomic<bool> running;
-    OS_Mutex printMutex;
 
 public:
     Kernel();
@@ -35,6 +34,11 @@ public:
     void stopScheduler();
 
     bool isRunning() { return running; }
+
+    // New: expose process list for the shell "ps" command
+    ProcessServer& getProcessServer() { return processServer; }
+    SchedulerService& getSchedulerService() { return schedulerService; }
+    MemoryService& getMemoryService() { return memoryService; }
 };
 
 #endif

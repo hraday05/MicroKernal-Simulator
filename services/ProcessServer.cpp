@@ -1,6 +1,6 @@
 #include <iostream>
-#include "../kernel/OS_Mutex.h"
 #include "ProcessServer.h"
+#include "../kernel/OS_Mutex.h"
 #include "../kernel/Globals.h"
 
 using namespace std;
@@ -28,7 +28,7 @@ void ProcessServer::handleMessage(Message msg) {
             PCB p;
             p.pid = nextPID++;
             p.name = "Process_" + to_string(p.pid);
-            p.burstTime = 5; // default CPU time
+            p.burstTime = 30; // Increased from 5 to 30 so user has time to interact
             p.state = "READY";
 
             processes.push_back(p);

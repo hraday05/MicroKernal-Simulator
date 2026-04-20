@@ -2,6 +2,7 @@
 #define MEMORY_SERVICE_H
 
 #include <map>
+#include <vector>
 #include "../ipc/IPC.h"
 #include "Service.h"
 
@@ -12,11 +13,15 @@ private:
     int totalPages;
     int usedPages;
 
+    // Per-PID frame tracking so we can actually free memory
+    std::map<int, std::vector<int>> pidFrameMap;
+
 public:
     MemoryService();
 
     void handleMessage(Message msg) override;
-    void freeAll(int pid);   // ✅ ADD THIS
+    void freeAll(int pid);
+    void printStats();   // New: show memory usage
 };
 
 #endif
