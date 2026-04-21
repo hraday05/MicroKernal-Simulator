@@ -629,9 +629,10 @@ string Kernel::executeCommand(const string& cmd) {
         int pid, bytes; ss >> pid >> bytes;
         Message msg;
         msg.type = "memory";
-        msg.sender = pid;
+        msg.sender = pid;   // Memory service needs the target PID
         msg.data = to_string(bytes);
-        sendMessageAs(1, msg);
+        // Send directly — not through sendMessageAs which would overwrite sender to 1
+        messageBus.sendMessage(msg);
         processMessages();
         result = "{\"ok\":true}";
         addConsoleLog("success", "[MemoryService] Allocated memory for PID " + to_string(pid));
@@ -640,9 +641,9 @@ string Kernel::executeCommand(const string& cmd) {
         int pid; ss >> pid;
         Message msg;
         msg.type = "free";
-        msg.sender = pid;
+        msg.sender = pid;   // Memory service needs the target PID
         msg.data = "all";
-        sendMessageAs(1, msg);
+        messageBus.sendMessage(msg);
         processMessages();
         result = "{\"ok\":true}";
         addConsoleLog("info", "[MemoryService] Freed memory for PID " + to_string(pid));

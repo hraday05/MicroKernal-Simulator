@@ -221,17 +221,19 @@ async function runLiveDemo() {
     // ===== PHASE 1: Process Creation =====
     termPhase('PHASE 1: Process Creation');
     status.textContent = 'Phase 1/9: Creating processes...';
-    await sendCommand('create_process 50 2'); await delay(800);
-    await sendCommand('create_process 30 5'); await delay(800);
-    await sendCommand('create_process 80 8'); await delay(1000);
+    let r1 = await sendCommand('create_process 50 2'); await delay(800);
+    let r2 = await sendCommand('create_process 30 5'); await delay(800);
+    let r3 = await sendCommand('create_process 80 8'); await delay(1000);
+    // Capture actual PIDs (may not be 100,101,102 if session isn't fresh)
+    const pid1 = r1.pid || 100, pid2 = r2.pid || 101, pid3 = r3.pid || 102;
 
     // ===== PHASE 2: Memory Allocation =====
     termPhase('PHASE 2: Memory Allocation');
     status.textContent = 'Phase 2/9: Allocating memory...';
-    await sendCommand('alloc 100 16384'); await delay(600);
-    await sendCommand('alloc 101 8192'); await delay(600);
+    await sendCommand(`alloc ${pid1} 16384`); await delay(600);
+    await sendCommand(`alloc ${pid2} 8192`); await delay(600);
     await sendCommand('set_memory best'); await delay(400);
-    await sendCommand('alloc 102 32768'); await delay(1000);
+    await sendCommand(`alloc ${pid3} 32768`); await delay(1000);
 
     // ===== PHASE 3: Scheduling =====
     termPhase('PHASE 3: CPU Scheduling (RR → Priority → SJF)');
@@ -259,7 +261,7 @@ async function runLiveDemo() {
     // ===== PHASE 5: IPC Channels =====
     termPhase('PHASE 5: IPC Message Passing');
     status.textContent = 'Phase 5/9: IPC channels...';
-    await sendCommand('ipc_create data_pipe 100'); await delay(600);
+    await sendCommand(`ipc_create data_pipe ${pid1}`); await delay(600);
     await sendCommand('ipc_send data_pipe result=42_status=complete'); await delay(600);
     await sendCommand('ipc_send data_pipe heartbeat_alive'); await delay(600);
     await sendCommand('ipc_recv data_pipe'); await delay(1000);
@@ -272,10 +274,10 @@ async function runLiveDemo() {
     // ===== PHASE 7: Deadlock Detection =====
     termPhase('PHASE 7: Deadlock Detection');
     status.textContent = 'Phase 7/9: Deadlock detection...';
-    await sendCommand('lock 100 resourceA'); await delay(600);
-    await sendCommand('lock 101 resourceB'); await delay(600);
-    await sendCommand('lock 100 resourceB'); await delay(600);
-    await sendCommand('lock 101 resourceA'); await delay(600);
+    await sendCommand(`lock ${pid1} resourceA`); await delay(600);
+    await sendCommand(`lock ${pid2} resourceB`); await delay(600);
+    await sendCommand(`lock ${pid1} resourceB`); await delay(600);
+    await sendCommand(`lock ${pid2} resourceA`); await delay(600);
     await sendCommand('deadlock'); await delay(1000);
 
     // ===== PHASE 8: Service Recovery =====
@@ -286,10 +288,10 @@ async function runLiveDemo() {
     // ===== PHASE 9: Process Signals =====
     termPhase('PHASE 9: Process Signals');
     status.textContent = 'Phase 9/9: Suspend/Resume/Kill...';
-    await sendCommand('suspend 101'); await delay(800);
+    await sendCommand(`suspend ${pid2}`); await delay(800);
     await sendCommand('tick'); await delay(600);
-    await sendCommand('resume 101'); await delay(800);
-    await sendCommand('kill 102'); await delay(1000);
+    await sendCommand(`resume ${pid2}`); await delay(800);
+    await sendCommand(`kill ${pid3}`); await delay(1000);
 
     // ===== DONE =====
     termPhase('DEMO COMPLETE ✅');
