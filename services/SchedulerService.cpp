@@ -9,6 +9,7 @@ using namespace std;
 
 SchedulerService::SchedulerService(ProcessServer* ps) : processServer(ps) {
     timeQuantum = 5;
+    lastEffectiveQuantum = 5;
     hasCurrent = false;
     currentTime = 0;
     totalContextSwitches = 0;
@@ -213,6 +214,11 @@ vector<PCB> SchedulerService::getProcessSnapshot() {
         snapshot.push_back(p);
     }
 
+    // Include recently completed (DEAD) processes
+    for (auto& p : completedList) {
+        snapshot.push_back(p);
+    }
+
     return snapshot;
 }
 
@@ -258,6 +264,7 @@ void SchedulerService::handleMessage(Message msg) {
 
         int runTime = (effectiveQuantum < currentRunning.remainingTime)
                        ? effectiveQuantum : currentRunning.remainingTime;
+        lastEffectiveQuantum = effectiveQuantum;  // Track for dashboard
 
         // Log for Gantt chart
         ScheduleEntry entry;
@@ -289,6 +296,8 @@ void SchedulerService::handleMessage(Message msg) {
             if (bus) bus->sendMessage(freeMsg);
 
             processServer->removeProcess(currentRunning.pid);
+            completedList.push_back(currentRunning);  // Keep for dashboard
+            if (completedList.size() > 6) completedList.erase(completedList.begin());
             hasCurrent = false;
 
             if (!readyList.empty()) {
@@ -450,6 +459,7 @@ string SchedulerService::toJSON() {
     ss << "{";
     ss << "\"algorithm\":\"" << getAlgorithmName() << "\",";
     ss << "\"quantum\":" << timeQuantum << ",";
+    ss << "\"effectiveQuantum\":" << lastEffectiveQuantum << ",";
     ss << "\"cpuTime\":" << currentTime << ",";
     ss << "\"contextSwitches\":" << totalContextSwitches << ",";
     ss << "\"completions\":" << totalCompletions << ",";

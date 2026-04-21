@@ -134,7 +134,7 @@ function updateStatusBar(sched,mem) {
     const cc=document.getElementById('cpu-chip');
     if(sched.currentPid>=0){cc.textContent=`CPU: P${sched.currentPid}`;cc.className='status-chip running';}
     else{cc.textContent='CPU: IDLE';cc.className='status-chip';}
-    document.getElementById('gantt-algo').textContent=`${sched.algorithm} (Q=${sched.quantum||5})`;
+    document.getElementById('gantt-algo').textContent=`${sched.algorithm} (Q=${sched.quantum||5} → eff:${sched.effectiveQuantum||sched.quantum||5})`;
 }
 
 function updateConnectionStatus(ok) {
