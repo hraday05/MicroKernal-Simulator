@@ -1,5 +1,6 @@
 #include "SchedulerService.h"
 #include "../kernel/Globals.h"
+#include "../kernel/Logger.h"
 #include <iostream>
 #include <iomanip>
 #include <sstream>
@@ -7,15 +8,193 @@
 using namespace std;
 
 SchedulerService::SchedulerService(ProcessServer* ps) : processServer(ps) {
-    timeQuantum = 2;
+    timeQuantum = 5;
     hasCurrent = false;
     currentTime = 0;
     totalContextSwitches = 0;
+    totalSkippedSwitches = 0;
     totalCompletions = 0;
+    algorithm = SchedulerAlgorithm::ROUND_ROBIN;
 }
 
 void SchedulerService::addProcess(PCB p) {
-    readyQueue.push(p);
+    readyList.push_back(p);
+}
+
+// =====================================================
+//  PROCESS SIGNALS
+// =====================================================
+
+bool SchedulerService::suspendProcess(int pid) {
+    // Check if it's the currently running process
+    if (hasCurrent && currentRunning.pid == pid) {
+        currentRunning.state = "BLOCKED";
+        blockedList.push_back(currentRunning);
+        hasCurrent = false;
+
+        OS_LockGuard lock(printMutex);
+        cout << "[Scheduler] SUSPENDED PID " << pid << " (was RUNNING → BLOCKED)\n";
+        sysLogger.log("[Scheduler]", "SUSPENDED PID " + to_string(pid));
+
+        // Pick next process
+        if (!readyList.empty()) {
+            int idx = pickNextIndex();
+            currentRunning = readyList[idx];
+            readyList.erase(readyList.begin() + idx);
+            currentRunning.state = "RUNNING";
+            hasCurrent = true;
+            totalContextSwitches++;
+        }
+        return true;
+    }
+
+    // Check ready list
+    for (auto it = readyList.begin(); it != readyList.end(); ++it) {
+        if (it->pid == pid) {
+            it->state = "BLOCKED";
+            blockedList.push_back(*it);
+            readyList.erase(it);
+
+            OS_LockGuard lock(printMutex);
+            cout << "[Scheduler] SUSPENDED PID " << pid << " (READY → BLOCKED)\n";
+            sysLogger.log("[Scheduler]", "SUSPENDED PID " + to_string(pid));
+            return true;
+        }
+    }
+
+    OS_LockGuard lock(printMutex);
+    cout << "[Scheduler] PID " << pid << " not found in scheduler.\n";
+    return false;
+}
+
+bool SchedulerService::resumeProcess(int pid) {
+    for (auto it = blockedList.begin(); it != blockedList.end(); ++it) {
+        if (it->pid == pid) {
+            it->state = "READY";
+            readyList.push_back(*it);
+            blockedList.erase(it);
+
+            OS_LockGuard lock(printMutex);
+            cout << "[Scheduler] RESUMED PID " << pid << " (BLOCKED → READY)\n";
+            sysLogger.log("[Scheduler]", "RESUMED PID " + to_string(pid));
+            return true;
+        }
+    }
+
+    OS_LockGuard lock(printMutex);
+    cout << "[Scheduler] PID " << pid << " not found in blocked list.\n";
+    return false;
+}
+
+bool SchedulerService::killProcess(int pid) {
+    // Kill currently running process
+    if (hasCurrent && currentRunning.pid == pid) {
+        hasCurrent = false;
+        totalCompletions++;
+
+        {
+            OS_LockGuard lock(printMutex);
+            cout << "[Scheduler] KILLED PID " << pid << " (was RUNNING)\n";
+        }
+        sysLogger.log("[Scheduler]", "KILLED PID " + to_string(pid));
+
+        Message freeMsg;
+        freeMsg.sender = pid;
+        freeMsg.receiver = 0;
+        freeMsg.type = "process_dead";
+        freeMsg.data = to_string(pid);
+        if (bus) bus->sendMessage(freeMsg);
+
+        processServer->removeProcess(pid);
+
+        if (!readyList.empty()) {
+            int idx = pickNextIndex();
+            currentRunning = readyList[idx];
+            readyList.erase(readyList.begin() + idx);
+            currentRunning.state = "RUNNING";
+            hasCurrent = true;
+            totalContextSwitches++;
+        }
+        return true;
+    }
+
+    // Kill from ready list
+    for (auto it = readyList.begin(); it != readyList.end(); ++it) {
+        if (it->pid == pid) {
+            readyList.erase(it);
+
+            {
+                OS_LockGuard lock(printMutex);
+                cout << "[Scheduler] KILLED PID " << pid << " (was READY)\n";
+            }
+            sysLogger.log("[Scheduler]", "KILLED PID " + to_string(pid));
+
+            Message freeMsg;
+            freeMsg.sender = pid;
+            freeMsg.type = "process_dead";
+            if (bus) bus->sendMessage(freeMsg);
+
+            processServer->removeProcess(pid);
+            return true;
+        }
+    }
+
+    // Kill from blocked list
+    for (auto it = blockedList.begin(); it != blockedList.end(); ++it) {
+        if (it->pid == pid) {
+            blockedList.erase(it);
+
+            {
+                OS_LockGuard lock(printMutex);
+                cout << "[Scheduler] KILLED PID " << pid << " (was BLOCKED)\n";
+            }
+            sysLogger.log("[Scheduler]", "KILLED PID " + to_string(pid));
+
+            Message freeMsg;
+            freeMsg.sender = pid;
+            freeMsg.type = "process_dead";
+            if (bus) bus->sendMessage(freeMsg);
+
+            processServer->removeProcess(pid);
+            return true;
+        }
+    }
+
+    OS_LockGuard lock(printMutex);
+    cout << "[Scheduler] PID " << pid << " not found.\n";
+    return false;
+}
+
+// =====================================================
+//  ALGORITHM-BASED NEXT PROCESS SELECTION
+// =====================================================
+
+int SchedulerService::pickNextIndex() {
+    if (readyList.empty()) return -1;
+
+    switch (algorithm) {
+        case SchedulerAlgorithm::ROUND_ROBIN:
+            return 0;
+
+        case SchedulerAlgorithm::PRIORITY: {
+            int bestIdx = 0;
+            for (int i = 1; i < (int)readyList.size(); i++) {
+                if (readyList[i].priority < readyList[bestIdx].priority)
+                    bestIdx = i;
+            }
+            return bestIdx;
+        }
+
+        case SchedulerAlgorithm::SJF: {
+            int bestIdx = 0;
+            for (int i = 1; i < (int)readyList.size(); i++) {
+                if (readyList[i].remainingTime < readyList[bestIdx].remainingTime)
+                    bestIdx = i;
+            }
+            return bestIdx;
+        }
+    }
+    return 0;
 }
 
 vector<PCB> SchedulerService::getProcessSnapshot() {
@@ -25,27 +204,31 @@ vector<PCB> SchedulerService::getProcessSnapshot() {
         snapshot.push_back(currentRunning);
     }
 
-    queue<PCB> tempQueue = readyQueue;
-    while (!tempQueue.empty()) {
-        snapshot.push_back(tempQueue.front());
-        tempQueue.pop();
+    for (auto& p : readyList) {
+        snapshot.push_back(p);
+    }
+
+    // Include blocked processes in snapshot
+    for (auto& p : blockedList) {
+        snapshot.push_back(p);
     }
 
     return snapshot;
 }
 
+// =====================================================
+//  SCHEDULING
+// =====================================================
+
 void SchedulerService::handleMessage(Message msg) {
     if (msg.type == "interrupt" && msg.data == "timer") {
 
-        // Nothing to schedule
-        if (readyQueue.empty() && !hasCurrent) {
-            return;
-        }
+        if (readyList.empty() && !hasCurrent) return;
 
-        // If no process is currently running, pick one from the queue
-        if (!hasCurrent && !readyQueue.empty()) {
-            currentRunning = readyQueue.front();
-            readyQueue.pop();
+        if (!hasCurrent && !readyList.empty()) {
+            int idx = pickNextIndex();
+            currentRunning = readyList[idx];
+            readyList.erase(readyList.begin() + idx);
             currentRunning.state = "RUNNING";
             hasCurrent = true;
             totalContextSwitches++;
@@ -53,11 +236,30 @@ void SchedulerService::handleMessage(Message msg) {
 
         if (!hasCurrent) return;
 
-        // Calculate actual run time: min(quantum, remaining)
-        int runTime = (timeQuantum < currentRunning.remainingTime)
-                       ? timeQuantum : currentRunning.remainingTime;
+        // Adaptive time quantum
+        int numActive = (int)readyList.size() + 1;
+        int effectiveQuantum = timeQuantum;
 
-        // ===== LOG THIS EXECUTION SLOT FOR GANTT CHART =====
+        if (numActive == 1) {
+            effectiveQuantum = timeQuantum * 10;   // alone: 10x
+        } else if (numActive == 2) {
+            // Smart scaling based on remaining burst
+            int avgRemaining = currentRunning.remainingTime;
+            if (!readyList.empty()) avgRemaining = (avgRemaining + readyList[0].remainingTime) / 2;
+            if (avgRemaining > 100) {
+                effectiveQuantum = timeQuantum * 3;   // 3x — high burst, reduce switches
+            } else if (avgRemaining > 40) {
+                effectiveQuantum = timeQuantum * 2;   // 2x — moderate burst
+            }
+            // else: keep base quantum — finishing soon
+        } else if (numActive <= 4) {
+            effectiveQuantum = timeQuantum * 2;
+        }
+
+        int runTime = (effectiveQuantum < currentRunning.remainingTime)
+                       ? effectiveQuantum : currentRunning.remainingTime;
+
+        // Log for Gantt chart
         ScheduleEntry entry;
         entry.pid = currentRunning.pid;
         entry.startTime = currentTime;
@@ -68,18 +270,17 @@ void SchedulerService::handleMessage(Message msg) {
         currentRunning.remainingTime -= runTime;
 
         if (currentRunning.remainingTime <= 0) {
-            // ===== PROCESS COMPLETED =====
             currentRunning.state = "DEAD";
             totalCompletions++;
 
             {
                 OS_LockGuard lock(printMutex);
-                cout << "[RR] Process PID " << currentRunning.pid
-                     << " completed execution (total CPU time: "
+                cout << "[" << getAlgorithmName() << "] Process PID " << currentRunning.pid
+                     << " completed execution (CPU time: "
                      << currentRunning.burstTime << ")\n";
             }
+            sysLogger.log("[Scheduler]", "PID " + to_string(currentRunning.pid) + " completed");
 
-            // Notify MemoryService to free all memory for this PID
             Message freeMsg;
             freeMsg.sender = currentRunning.pid;
             freeMsg.receiver = 0;
@@ -90,102 +291,103 @@ void SchedulerService::handleMessage(Message msg) {
             processServer->removeProcess(currentRunning.pid);
             hasCurrent = false;
 
-            // Immediately pick next process if available
-            if (!readyQueue.empty()) {
-                currentRunning = readyQueue.front();
-                readyQueue.pop();
+            if (!readyList.empty()) {
+                int idx = pickNextIndex();
+                currentRunning = readyList[idx];
+                readyList.erase(readyList.begin() + idx);
                 currentRunning.state = "RUNNING";
                 hasCurrent = true;
                 totalContextSwitches++;
             }
 
         } else {
-            // ===== TIME QUANTUM EXPIRED — PREEMPT =====
-            currentRunning.state = "READY";
-            readyQueue.push(currentRunning);
+            if (readyList.empty()) {
+                totalSkippedSwitches++;
+            } else {
+                currentRunning.state = "READY";
+                readyList.push_back(currentRunning);
 
-            // Pick next process from front of queue
-            currentRunning = readyQueue.front();
-            readyQueue.pop();
-            currentRunning.state = "RUNNING";
-            hasCurrent = true;
-            totalContextSwitches++;
+                int idx = pickNextIndex();
+                currentRunning = readyList[idx];
+                readyList.erase(readyList.begin() + idx);
+                currentRunning.state = "RUNNING";
+                hasCurrent = true;
+                totalContextSwitches++;
+            }
         }
     }
 }
 
 // =====================================================
-//  GANTT CHART VISUALIZATION
+//  ALGORITHM MANAGEMENT
+// =====================================================
+
+void SchedulerService::setAlgorithm(SchedulerAlgorithm algo) {
+    algorithm = algo;
+    OS_LockGuard lock(printMutex);
+    cout << "[Scheduler] Algorithm changed to: " << getAlgorithmName() << "\n";
+    sysLogger.log("[Scheduler]", "Algorithm changed to " + getAlgorithmName());
+}
+
+string SchedulerService::getAlgorithmName() {
+    switch (algorithm) {
+        case SchedulerAlgorithm::ROUND_ROBIN: return "Round Robin";
+        case SchedulerAlgorithm::PRIORITY:    return "Priority";
+        case SchedulerAlgorithm::SJF:         return "SJF";
+        default: return "Unknown";
+    }
+}
+
+// =====================================================
+//  GANTT CHART
 // =====================================================
 
 void SchedulerService::printGanttChart() {
     OS_LockGuard lock(printMutex);
 
     if (executionLog.empty()) {
-        cout << "\n  No scheduling data available yet.\n";
-        cout << "  Create some processes first with 'create_process [burst]'!\n\n";
+        cout << "\n  No scheduling data available yet.\n\n";
         return;
     }
 
-    cout << "\n";
-    cout << "  ================================================\n";
-    cout << "   GANTT CHART - Round Robin (Quantum = " << timeQuantum << ")\n";
+    cout << "\n  ================================================\n";
+    cout << "   GANTT CHART - " << getAlgorithmName() << " (Quantum = " << timeQuantum << ")\n";
     cout << "  ================================================\n\n";
 
-    // --- Top border ---
     cout << "  +";
-    for (size_t i = 0; i < executionLog.size(); i++) {
-        cout << "------+";
-    }
-    cout << "\n";
+    for (size_t i = 0; i < executionLog.size(); i++) cout << "------+";
+    cout << "\n  |";
 
-    // --- Process IDs ---
-    cout << "  |";
     for (auto& e : executionLog) {
-        // Format: " P100 " (6 chars)
         stringstream ss;
         ss << "P" << e.pid;
         string label = ss.str();
-
-        // Center the label in 6 chars
         int totalPad = 6 - (int)label.length();
         int leftPad = totalPad / 2;
         int rightPad = totalPad - leftPad;
-
         cout << string(leftPad, ' ') << label << string(rightPad, ' ') << "|";
     }
-    cout << "\n";
+    cout << "\n  +";
+    for (size_t i = 0; i < executionLog.size(); i++) cout << "------+";
+    cout << "\n  ";
 
-    // --- Bottom border ---
-    cout << "  +";
-    for (size_t i = 0; i < executionLog.size(); i++) {
-        cout << "------+";
-    }
-    cout << "\n";
-
-    // --- Time labels (aligned with cell borders) ---
-    cout << "  ";
-    string firstLabel = to_string(executionLog[0].startTime);
-    cout << firstLabel;
-
-    for (size_t i = 0; i < executionLog.size(); i++) {
-        string endLabel = to_string(executionLog[i].endTime);
-        int padding = 7 - (int)endLabel.length();
-        if (padding < 1) padding = 1;
-        cout << string(padding, ' ') << endLabel;
+    for (size_t i = 0; i <= executionLog.size(); i++) {
+        int time = (i == 0) ? executionLog[0].startTime : executionLog[i-1].endTime;
+        string ts = to_string(time);
+        cout << ts;
+        if (i < executionLog.size()) {
+            int pad = 7 - (int)ts.length();
+            if (pad > 0) cout << string(pad, ' ');
+        }
     }
     cout << "\n\n";
 }
-
-// =====================================================
-//  DETAILED EXECUTION LOG
-// =====================================================
 
 void SchedulerService::printDetailedLog() {
     OS_LockGuard lock(printMutex);
 
     if (executionLog.empty()) {
-        cout << "\n  No execution log available.\n\n";
+        cout << "  No execution log available.\n\n";
         return;
     }
 
@@ -203,29 +405,36 @@ void SchedulerService::printDetailedLog() {
     cout << "  +---------+-------+-------------------+\n\n";
 }
 
-// =====================================================
-//  SCHEDULER STATISTICS
-// =====================================================
-
 void SchedulerService::printStats() {
     OS_LockGuard lock(printMutex);
 
     cout << "\n  ========== Scheduler Statistics ==========\n";
-    cout << "  Algorithm:          Round Robin\n";
+    cout << "  Algorithm:          " << getAlgorithmName() << "\n";
     cout << "  Time Quantum:       " << timeQuantum << "\n";
     cout << "  Current CPU Time:   " << currentTime << "\n";
     cout << "  Context Switches:   " << totalContextSwitches << "\n";
+    cout << "  Switches Skipped:   " << totalSkippedSwitches << " (adaptive optimization)\n";
     cout << "  Processes Completed:" << totalCompletions << "\n";
 
-    // Count currently scheduled processes
-    int inQueue = (int)readyQueue.size() + (hasCurrent ? 1 : 0);
-    cout << "  Processes in Queue: " << inQueue << "\n";
+    int inReady = (int)readyList.size() + (hasCurrent ? 1 : 0);
+    int inBlocked = (int)blockedList.size();
+    cout << "  Ready Queue:        " << inReady << " processes\n";
+    cout << "  Blocked (Suspended):" << inBlocked << " processes\n";
 
     if (hasCurrent) {
         cout << "  Currently Running:  PID " << currentRunning.pid
-             << " (remaining: " << currentRunning.remainingTime << ")\n";
+             << " (remaining: " << currentRunning.remainingTime
+             << ", priority: " << currentRunning.priority << ")\n";
     } else {
         cout << "  Currently Running:  IDLE\n";
+    }
+
+    if (!blockedList.empty()) {
+        cout << "  Blocked Processes:  ";
+        for (auto& p : blockedList) {
+            cout << "PID " << p.pid << " ";
+        }
+        cout << "\n";
     }
 
     cout << "  Execution Slots:    " << executionLog.size() << "\n";

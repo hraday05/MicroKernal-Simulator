@@ -1,2 +1,16 @@
-simulator.exe
-build.log
+# Compiled binaries
+*.exe
+*.o
+*.out
+microkernel
+
+# Virtual file system (runtime generated)
+virtual_fs/
+
+# IDE files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db

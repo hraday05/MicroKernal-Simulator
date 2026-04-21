@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MicroKernel OS Simulator v5.0 — Dashboard</title>
+    <meta name="description" content="Interactive MicroKernel OS Simulator with visual process scheduling, memory management, deadlock detection, and IPC channels.">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- HEADER -->
+    <header id="main-header">
+        <div class="header-left">
+            <div class="logo-icon">⚙</div>
+            <h1>MicroKernel OS <span class="version">v5.0</span></h1>
+        </div>
+        <div class="header-status">
+            <div class="status-chip" id="sched-chip">RR</div>
+            <div class="status-chip" id="mem-chip">First Fit</div>
+            <div class="status-chip running" id="cpu-chip">CPU: IDLE</div>
+            <div class="status-chip" id="time-chip">t=0</div>
+            <button class="btn-play" id="btn-auto-tick" title="Auto-run scheduler">▶ Auto</button>
+        </div>
+    </header>
+
+    <!-- MAIN LAYOUT -->
+    <main id="app">
+        <!-- SIDEBAR: Command Buttons -->
+        <aside id="sidebar">
+            <div class="cmd-group">
+                <h3 class="cmd-group-title" data-toggle="process-cmds">⚡ Process</h3>
+                <div class="cmd-buttons" id="process-cmds">
+                    <button class="cmd-btn" data-cmd="create_process" title="Create a new process">+ Create</button>
+                    <button class="cmd-btn" data-cmd="list_process" title="List processes">📋 List</button>
+                    <button class="cmd-btn" data-cmd="ps" title="Scheduler snapshot">🔍 PS</button>
+                    <button class="cmd-btn danger" data-cmd="kill" title="Kill a process">💀 Kill</button>
+                    <button class="cmd-btn warn" data-cmd="suspend" title="Suspend a process">⏸ Suspend</button>
+                    <button class="cmd-btn success" data-cmd="resume" title="Resume a process">▶ Resume</button>
+                </div>
+            </div>
+
+            <div class="cmd-group">
+                <h3 class="cmd-group-title" data-toggle="sched-cmds">🕐 Scheduling</h3>
+                <div class="cmd-buttons" id="sched-cmds">
+                    <button class="cmd-btn active" data-cmd="set_rr" title="Round Robin">RR</button>
+                    <button class="cmd-btn" data-cmd="set_priority" title="Priority scheduling">Priority</button>
+                    <button class="cmd-btn" data-cmd="set_sjf" title="Shortest Job First">SJF</button>
+                    <button class="cmd-btn" data-cmd="tick" title="Manual tick">⏱ Tick</button>
+                    <button class="cmd-btn" data-cmd="gantt" title="Show Gantt chart">📊 Gantt</button>
+                    <button class="cmd-btn" data-cmd="schedstat" title="Scheduler stats">📈 Stats</button>
+                </div>
+            </div>
+
+            <div class="cmd-group">
+                <h3 class="cmd-group-title" data-toggle="mem-cmds">💾 Memory</h3>
+                <div class="cmd-buttons" id="mem-cmds">
+                    <button class="cmd-btn" data-cmd="alloc" title="Allocate memory">+ Alloc</button>
+                    <button class="cmd-btn danger" data-cmd="free_mem" title="Free memory">🗑 Free</button>
+                    <button class="cmd-btn active" data-cmd="set_first" title="First Fit">1st Fit</button>
+                    <button class="cmd-btn" data-cmd="set_best" title="Best Fit">Best</button>
+                    <button class="cmd-btn" data-cmd="set_worst" title="Worst Fit">Worst</button>
+                    <button class="cmd-btn" data-cmd="memmap" title="Memory map">🗺 Map</button>
+                </div>
+            </div>
+
+            <div class="cmd-group">
+                <h3 class="cmd-group-title" data-toggle="file-cmds">📁 Files</h3>
+                <div class="cmd-buttons" id="file-cmds">
+                    <button class="cmd-btn" data-cmd="create_file" title="Create file">+ Create</button>
+                    <button class="cmd-btn" data-cmd="read_file" title="Read file">📖 Read</button>
+                    <button class="cmd-btn" data-cmd="write_file" title="Write file">✏️ Write</button>
+                    <button class="cmd-btn danger" data-cmd="delete_file" title="Delete file">🗑 Delete</button>
+                    <button class="cmd-btn" data-cmd="chmod_file" title="Change permissions">🔒 Chmod</button>
+                    <button class="cmd-btn" data-cmd="ls" title="List files">📂 LS</button>
+                </div>
+            </div>
+
+            <div class="cmd-group">
+                <h3 class="cmd-group-title" data-toggle="sec-cmds">🔐 Security</h3>
+                <div class="cmd-buttons" id="sec-cmds">
+                    <button class="cmd-btn success" data-cmd="grant" title="Grant capability">✅ Grant</button>
+                    <button class="cmd-btn danger" data-cmd="revoke" title="Revoke capability">❌ Revoke</button>
+                    <button class="cmd-btn" data-cmd="capabilities" title="View capabilities">📋 Caps</button>
+                    <button class="cmd-btn warn" data-cmd="hack_file" title="Hack attempt">🏴‍☠️ Hack</button>
+                </div>
+            </div>
+
+            <div class="cmd-group">
+                <h3 class="cmd-group-title" data-toggle="conc-cmds">🔄 Concurrency</h3>
+                <div class="cmd-buttons" id="conc-cmds">
+                    <button class="cmd-btn" data-cmd="lock" title="Lock resource">🔒 Lock</button>
+                    <button class="cmd-btn" data-cmd="unlock" title="Unlock resource">🔓 Unlock</button>
+                    <button class="cmd-btn danger" data-cmd="deadlock" title="Detect deadlock">💥 Deadlock</button>
+                    <button class="cmd-btn" data-cmd="resources" title="Show resources">📋 Resources</button>
+                    <button class="cmd-btn" data-cmd="sem_create" title="Create semaphore">🚦 Sem+</button>
+                    <button class="cmd-btn" data-cmd="sem_wait" title="Semaphore P()">⬇ P()</button>
+                    <button class="cmd-btn" data-cmd="sem_signal" title="Semaphore V()">⬆ V()</button>
+                </div>
+            </div>
+
+            <div class="cmd-group">
+                <h3 class="cmd-group-title" data-toggle="ipc-cmds">📡 IPC</h3>
+                <div class="cmd-buttons" id="ipc-cmds">
+                    <button class="cmd-btn" data-cmd="ipc_create" title="Create channel">+ Channel</button>
+                    <button class="cmd-btn" data-cmd="ipc_send" title="Send message">📤 Send</button>
+                    <button class="cmd-btn" data-cmd="ipc_recv" title="Receive message">📥 Recv</button>
+                    <button class="cmd-btn" data-cmd="ipc_list" title="List channels">📋 List</button>
+                </div>
+            </div>
+
+            <div class="cmd-group">
+                <h3 class="cmd-group-title" data-toggle="sys-cmds">🖥 System</h3>
+                <div class="cmd-buttons" id="sys-cmds">
+                    <button class="cmd-btn" data-cmd="syslog" title="System log">📜 Log</button>
+                    <button class="cmd-btn danger" data-cmd="kill_service" title="Crash FileService">💣 Crash</button>
+                    <button class="cmd-btn" data-cmd="clear" title="Clear console">🧹 Clear</button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- DASHBOARD PANELS -->
+        <section id="dashboard">
+            <!-- TOP ROW: Process Nodes + Memory Map -->
+            <div class="top-row">
+                <div class="panel" id="process-panel">
+                    <div class="panel-header">
+                        <h2>Process Visualization</h2>
+                        <span class="badge" id="proc-count">0 processes</span>
+                    </div>
+                    <div class="panel-body" id="process-nodes-container">
+                        <div class="empty-state" id="proc-empty">
+                            <span class="empty-icon">⚡</span>
+                            <p>No processes created yet</p>
+                            <p class="hint">Click "+ Create" to begin</p>
+                        </div>
+                    </div>
+                    <div class="panel-legend">
+                        <span class="legend-item"><span class="dot ready"></span>Ready</span>
+                        <span class="legend-item"><span class="dot running"></span>Running</span>
+                        <span class="legend-item"><span class="dot blocked"></span>Blocked</span>
+                        <span class="legend-item"><span class="dot dead"></span>Dead</span>
+                    </div>
+                </div>
+
+                <div class="panel" id="memory-panel">
+                    <div class="panel-header">
+                        <h2>Memory Map</h2>
+                        <span class="badge" id="mem-usage">0 / 256 pages</span>
+                    </div>
+                    <div class="panel-body">
+                        <div class="memory-bar" id="memory-bar"></div>
+                        <div class="memory-details" id="memory-details"></div>
+                    </div>
+                    <div class="panel-legend">
+                        <span class="legend-item"><span class="dot mem-used"></span>Used</span>
+                        <span class="legend-item"><span class="dot mem-free"></span>Free</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MIDDLE: Gantt Chart -->
+            <div class="panel" id="gantt-panel">
+                <div class="panel-header">
+                    <h2>CPU Scheduling — Gantt Chart</h2>
+                    <span class="badge" id="gantt-algo">Round Robin (Q=2)</span>
+                </div>
+                <div class="panel-body gantt-body">
+                    <div class="gantt-timeline" id="gantt-timeline">
+                        <div class="gantt-empty">Scheduling data will appear as processes execute</div>
+                    </div>
+                    <div class="gantt-time-axis" id="gantt-axis"></div>
+                </div>
+            </div>
+
+            <!-- BOTTOM: Console -->
+            <div class="panel" id="console-panel">
+                <div class="panel-header">
+                    <h2>System Console</h2>
+                    <span class="badge" id="log-count">0 events</span>
+                </div>
+                <div class="console-output" id="console-output">
+                    <div class="console-line boot">[00:00.000] MicroKernel OS v5.0 booted</div>
+                    <div class="console-line boot">[00:00.000] Services initialized: ProcessServer, MemoryService, FileService, SchedulerService, SecurityServer</div>
+                    <div class="console-line boot">[00:00.000] Shell PID 1 granted CAP_FILE + CAP_MEM</div>
+                    <div class="console-line info">[00:00.000] Type 'help' or click a command button to begin</div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- INPUT MODAL -->
+    <div class="modal-overlay" id="modal-overlay">
+        <div class="modal" id="input-modal">
+            <h3 id="modal-title">Input Required</h3>
+            <div id="modal-fields"></div>
+            <div class="modal-actions">
+                <button class="cmd-btn" id="modal-cancel">Cancel</button>
+                <button class="cmd-btn success" id="modal-confirm">Execute</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

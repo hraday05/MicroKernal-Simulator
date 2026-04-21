@@ -1,12 +1,12 @@
 #ifndef SCHEDULER_SERVICE_H
 #define SCHEDULER_SERVICE_H
 
-#include "Service.h"
 #include "ProcessServer.h"
-#include <queue>
+#include "Service.h"
 #include <vector>
 
-// Tracks one scheduling time slot for the Gantt chart
+enum class SchedulerAlgorithm { ROUND_ROBIN, PRIORITY, SJF };
+
 struct ScheduleEntry {
     int pid;
     int startTime;
@@ -15,27 +15,40 @@ struct ScheduleEntry {
 
 class SchedulerService : public Service {
 private:
-    std::queue<PCB> readyQueue;
+    std::vector<PCB> readyList;
+    std::vector<PCB> blockedList;   // suspended/blocked processes
     int timeQuantum;
     ProcessServer* processServer;
+    SchedulerAlgorithm algorithm;
+
     PCB currentRunning;
     bool hasCurrent;
 
-    // Execution tracking for visualization
     std::vector<ScheduleEntry> executionLog;
     int currentTime;
     int totalContextSwitches;
+    int totalSkippedSwitches;
     int totalCompletions;
+
+    int pickNextIndex();
 
 public:
     SchedulerService(ProcessServer* ps);
     void handleMessage(Message msg) override;
     void addProcess(PCB p);
 
-    // Snapshot for the 'ps' command
     std::vector<PCB> getProcessSnapshot();
 
-    // Visualization & Monitoring
+    // Process signals
+    bool suspendProcess(int pid);
+    bool resumeProcess(int pid);
+    bool killProcess(int pid);
+
+    // Algorithm management
+    void setAlgorithm(SchedulerAlgorithm algo);
+    std::string getAlgorithmName();
+
+    // Visualization
     void printGanttChart();
     void printDetailedLog();
     void printStats();

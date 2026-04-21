@@ -5,28 +5,7 @@
 using namespace std;
 
 void MessageBus::sendMessage(Message msg) {
-    // ----------------------------------------------------
-    // SANDBOXING LAYER (Mechanism)
-    // Here the Microkernel evaluates Capability Tokens!
-    // ----------------------------------------------------
-    if (msg.sender != 0 && msg.type == "file") {
-        if (msg.capabilityToken != "CAP_FILE") {
-            OS_LockGuard pLock(printMutex); 
-            cout << "[Sandbox] DENIED: PID " << msg.sender 
-                 << " attempted unauthorized file operation!\n";
-            return;
-        }
-    }
-    
-    if (msg.sender != 0 && msg.type == "memory") {
-        if (msg.capabilityToken != "CAP_MEM") {
-            OS_LockGuard pLock(printMutex); 
-            cout << "[Sandbox] DENIED: PID " << msg.sender 
-                 << " attempted unauthorized memory operation!\n";
-            return;
-        }
-    }
-
+    // No sandboxing here anymore — moved to Kernel for proper microkernel design
     OS_LockGuard lock(queueMutex);
     messageQueue.push(msg);
 }

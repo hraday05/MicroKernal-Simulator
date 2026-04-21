@@ -1,27 +1,42 @@
 #ifndef MEMORY_SERVICE_H
 #define MEMORY_SERVICE_H
 
-#include <map>
 #include <vector>
+#include <string>
 #include "../ipc/IPC.h"
 #include "Service.h"
 
+enum class MemAlgorithm { FIRST_FIT, BEST_FIT, WORST_FIT };
+
+struct MemBlock {
+    int startFrame;
+    int size;       // in pages
+    bool free;
+    int ownerPid;   // -1 if free
+};
+
 class MemoryService : public Service {
 private:
-    std::vector<bool> physicalMemory; // false = free, true = used
+    std::vector<MemBlock> blocks;
     int pageSize;
     int totalPages;
-    int usedPages;
+    MemAlgorithm algorithm;
 
-    // Per-PID frame tracking so we can actually free memory
-    std::map<int, std::vector<int>> pidFrameMap;
+    int findFirstFit(int pagesNeeded);
+    int findBestFit(int pagesNeeded);
+    int findWorstFit(int pagesNeeded);
+
+    void splitBlock(int blockIndex, int pagesNeeded, int pid);
+    void coalesce();
 
 public:
     MemoryService();
-
     void handleMessage(Message msg) override;
     void freeAll(int pid);
-    void printStats();   // New: show memory usage
+    void printStats();
+    void printMemoryMap();
+    void setAlgorithm(MemAlgorithm algo);
+    std::string getAlgorithmName();
 };
 
 #endif
