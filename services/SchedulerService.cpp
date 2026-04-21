@@ -440,3 +440,47 @@ void SchedulerService::printStats() {
     cout << "  Execution Slots:    " << executionLog.size() << "\n";
     cout << "  ==========================================\n\n";
 }
+
+// =====================================================
+//  JSON EXPORT FOR HTTP API
+// =====================================================
+
+string SchedulerService::toJSON() {
+    stringstream ss;
+    ss << "{";
+    ss << "\"algorithm\":\"" << getAlgorithmName() << "\",";
+    ss << "\"quantum\":" << timeQuantum << ",";
+    ss << "\"cpuTime\":" << currentTime << ",";
+    ss << "\"contextSwitches\":" << totalContextSwitches << ",";
+    ss << "\"completions\":" << totalCompletions << ",";
+    ss << "\"currentPid\":" << (hasCurrent ? currentRunning.pid : -1) << ",";
+
+    // Processes
+    ss << "\"processes\":[";
+    vector<PCB> snapshot = getProcessSnapshot();
+    for (size_t i = 0; i < snapshot.size(); i++) {
+        auto& p = snapshot[i];
+        ss << "{\"pid\":" << p.pid
+           << ",\"name\":\"" << p.name << "\""
+           << ",\"burst\":" << p.burstTime
+           << ",\"remaining\":" << p.remainingTime
+           << ",\"priority\":" << p.priority
+           << ",\"state\":\"" << p.state << "\"}";
+        if (i < snapshot.size() - 1) ss << ",";
+    }
+    ss << "],";
+
+    // Gantt log
+    ss << "\"gantt\":[";
+    for (size_t i = 0; i < executionLog.size(); i++) {
+        auto& e = executionLog[i];
+        ss << "{\"pid\":" << e.pid
+           << ",\"start\":" << e.startTime
+           << ",\"end\":" << e.endTime << "}";
+        if (i < executionLog.size() - 1) ss << ",";
+    }
+    ss << "]";
+
+    ss << "}";
+    return ss.str();
+}

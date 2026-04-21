@@ -68,3 +68,28 @@ void Logger::printLog(int lastN) {
     cout << "  Total entries: " << entries.size() << "\n";
     cout << "  =====================================================\n\n";
 }
+
+string Logger::toJSON(int lastN) {
+    OS_LockGuard lock(mutex);
+    stringstream ss;
+    ss << "[";
+    int start = (int)entries.size() > lastN ? (int)entries.size() - lastN : 0;
+    for (int i = start; i < (int)entries.size(); i++) {
+        if (i > start) ss << ",";
+        // Escape any quotes in messages
+        string msg = entries[i].message;
+        string escaped = "";
+        for (char c : msg) {
+            if (c == '"') escaped += "\\\"";
+            else if (c == '\\') escaped += "\\\\";
+            else if (c == '\n') escaped += "\\n";
+            else escaped += c;
+        }
+        string comp = entries[i].component;
+        ss << "{\"t\":\"" << formatTimestamp(entries[i].timestamp) << "\""
+           << ",\"component\":\"" << comp << "\""
+           << ",\"msg\":\"" << escaped << "\"}";
+    }
+    ss << "]";
+    return ss.str();
+}

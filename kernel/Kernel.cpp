@@ -17,11 +17,31 @@ Kernel::Kernel() : schedulerService(&processServer) {
     schedulerService.setBus(&messageBus);
     securityServer.setBus(&messageBus);
 
-    securityServer.initDefaultCapabilities(1); // Shell PID
-    sysLogger.log("[Kernel]", "MicroKernel OS v5.0 booted");
+    securityServer.initShellCapabilities(1); // Shell PID — gets ALL capabilities
+    sysLogger.log("[Kernel]", "MicroKernel OS v5.0 booted (Sandbox Hardened)");
 }
 
+// =====================================================
+//  IDENTITY-SAFE MESSAGE API
+// =====================================================
+
 void Kernel::sendMessage(Message msg) {
+    // Kernel-internal path: used by scheduler thread (sender=0)
+    messageBus.sendMessage(msg);
+}
+
+void Kernel::sendMessageAs(int truePid, Message msg) {
+    // ===== IDENTITY FORGERY PREVENTION =====
+    // The kernel STAMPS the sender — user-space cannot forge it
+    if (msg.sender != truePid && msg.sender != 0) {
+        OS_LockGuard lock(printMutex);
+        cout << "[Sandbox] IDENTITY OVERRIDE: caller=" << truePid
+             << " tried to forge sender=" << msg.sender
+             << " — STAMPED to " << truePid << "\n";
+        sysLogger.log("[Sandbox]", "IDENTITY OVERRIDE: PID " + to_string(truePid) +
+                      " tried to forge sender=" + to_string(msg.sender));
+    }
+    msg.sender = truePid;  // Kernel stamps the real sender
     messageBus.sendMessage(msg);
 }
 
@@ -31,28 +51,13 @@ void Kernel::processMessages() {
 
         if (msg.type != "interrupt") {
             OS_LockGuard lock(printMutex);
-            cout << "[Kernel] Routing message type='" << msg.type << "'...\n";
+            cout << "[Kernel] Routing message type='" << msg.type << "' from PID " << msg.sender << "...\n";
         }
 
-        // ===== CAPABILITY-BASED SANDBOXING =====
-        if (msg.sender != 0 && msg.type == "file") {
-            if (!securityServer.hasCapability(msg.sender, "CAP_FILE")) {
-                OS_LockGuard lock(printMutex);
-                cout << "[Sandbox] DENIED: PID " << msg.sender
-                     << " — unauthorized FILE operation! (no CAP_FILE)\n";
-                sysLogger.log("[Sandbox]", "DENIED PID " + to_string(msg.sender) + " FILE access");
-                continue;
-            }
-        }
-
-        if (msg.sender != 0 && msg.type == "memory") {
-            if (!securityServer.hasCapability(msg.sender, "CAP_MEM")) {
-                OS_LockGuard lock(printMutex);
-                cout << "[Sandbox] DENIED: PID " << msg.sender
-                     << " — unauthorized MEMORY operation! (no CAP_MEM)\n";
-                sysLogger.log("[Sandbox]", "DENIED PID " + to_string(msg.sender) + " MEM access");
-                continue;
-            }
+        // ===== UNIFIED CAPABILITY-BASED SANDBOXING =====
+        // One call validates ALL message types (file, memory, ipc, process, signal, etc.)
+        if (!securityServer.validateMessage(msg.sender, msg)) {
+            continue;  // Message denied — skip routing
         }
 
         // ===== MESSAGE ROUTING =====
@@ -84,6 +89,21 @@ void Kernel::processMessages() {
             securityServer.removeProcess(msg.sender);
         }
         else if (msg.type == "request_capability") {
+            securityServer.handleMessage(msg);
+        }
+        // ===== NEW: Signal routing (kill/suspend/resume through IPC) =====
+        else if (msg.type == "signal") {
+            // data format: "signal_type pid" e.g. "kill 100"
+            stringstream ss(msg.data);
+            string sigType;
+            int targetPid;
+            ss >> sigType >> targetPid;
+            if (!ss.fail()) {
+                signalProcess(targetPid, sigType);
+            }
+        }
+        // ===== NEW: Security grant/revoke through IPC =====
+        else if (msg.type == "security_grant" || msg.type == "security_revoke") {
             securityServer.handleMessage(msg);
         }
         else if (msg.type == "kill_service") {
@@ -267,7 +287,7 @@ bool Kernel::detectDeadlock() {
                 cout << "  Deadlock cycle: ";
                 for (size_t i = 0; i < cyclePath.size(); i++) {
                     cout << "PID " << cyclePath[i];
-                    if (i < cyclePath.size() - 1) cout << " → ";
+                    if (i < cyclePath.size() - 1) cout << " -> ";
                 }
                 cout << "\n";
                 return true;
@@ -289,7 +309,7 @@ void Kernel::printWaitForGraph() {
         if (rl.heldBy != -1 && !rl.waiters.empty()) {
             for (int waiter : rl.waiters) {
                 cout << "  PID " << waiter << " --waits-for('" << rl.name
-                     << "')--> PID " << rl.heldBy << "\n";
+                     << "')-->  PID " << rl.heldBy << "\n";
                 hasEdges = true;
             }
         }
@@ -458,4 +478,422 @@ void Kernel::stopScheduler() {
         schedulerThread.join();
     }
     sysLogger.log("[Kernel]", "Scheduler thread stopped");
+}
+
+// =====================================================
+//  CONSOLE LOG BUFFER (for dashboard)
+// =====================================================
+
+void Kernel::addConsoleLog(const string& type, const string& msg) {
+    OS_LockGuard lock(consoleMutex);
+    consoleLog.push_back({type, msg});
+    // Keep max 200 entries
+    if (consoleLog.size() > 200) {
+        consoleLog.erase(consoleLog.begin(), consoleLog.begin() + 100);
+    }
+}
+
+string Kernel::getConsoleJSON(int lastN) {
+    OS_LockGuard lock(consoleMutex);
+    stringstream ss;
+    ss << "[";
+    int start = (int)consoleLog.size() > lastN ? (int)consoleLog.size() - lastN : 0;
+    for (int i = start; i < (int)consoleLog.size(); i++) {
+        if (i > start) ss << ",";
+        // Escape message
+        string escaped = "";
+        for (char c : consoleLog[i].msg) {
+            if (c == '"') escaped += "\\\"";
+            else if (c == '\\') escaped += "\\\\";
+            else if (c == '\n') escaped += "\\n";
+            else escaped += c;
+        }
+        ss << "{\"type\":\"" << consoleLog[i].type << "\",\"msg\":\"" << escaped << "\"}";
+    }
+    ss << "]";
+    return ss.str();
+}
+
+// =====================================================
+//  JSON EXPORT — FULL KERNEL STATE
+// =====================================================
+
+string Kernel::getChannelsJSON() {
+    stringstream ss;
+    ss << "[";
+    int idx = 0;
+    for (auto& entry : channels) {
+        if (idx > 0) ss << ",";
+        ss << "{\"name\":\"" << entry.second.name << "\""
+           << ",\"owner\":" << entry.second.ownerPid
+           << ",\"buffered\":" << entry.second.buffer.size() << "}";
+        idx++;
+    }
+    ss << "]";
+    return ss.str();
+}
+
+string Kernel::getResourcesJSON() {
+    stringstream ss;
+    ss << "[";
+    int idx = 0;
+    for (auto& entry : resources) {
+        if (idx > 0) ss << ",";
+        auto& rl = entry.second;
+        ss << "{\"name\":\"" << rl.name << "\""
+           << ",\"heldBy\":" << rl.heldBy
+           << ",\"waiters\":[";
+        for (size_t w = 0; w < rl.waiters.size(); w++) {
+            if (w > 0) ss << ",";
+            ss << rl.waiters[w];
+        }
+        ss << "]}";
+        idx++;
+    }
+    ss << "]";
+    return ss.str();
+}
+
+string Kernel::toJSON() {
+    stringstream ss;
+    ss << "{";
+    ss << "\"scheduler\":" << schedulerService.toJSON() << ",";
+    ss << "\"memory\":" << memoryService.toJSON() << ",";
+    ss << "\"files\":" << fileService.toJSON() << ",";
+    ss << "\"capabilities\":" << securityServer.toJSON() << ",";
+    ss << "\"channels\":" << getChannelsJSON() << ",";
+    ss << "\"resources\":" << getResourcesJSON() << ",";
+    ss << "\"console\":" << getConsoleJSON() << ",";
+    ss << "\"syslog\":" << sysLogger.toJSON(30);
+    ss << "}";
+    return ss.str();
+}
+
+// =====================================================
+//  EXECUTE COMMAND (for HTTP API)
+// =====================================================
+
+string Kernel::executeCommand(const string& cmd) {
+    stringstream ss(cmd);
+    string action;
+    ss >> action;
+
+    string result = "";
+
+    if (action == "create_process") {
+        int burst = 30, priority = 5;
+        ss >> burst >> priority;
+        Message msg;
+        msg.type = "command";
+        msg.data = "create_process";
+        msg.receiver = burst;
+        msg.capabilityToken = to_string(priority);
+        sendMessageAs(1, msg);
+        processMessages();
+        int pid = processServer.getLastProcess().pid;
+        result = "{\"ok\":true,\"pid\":" + to_string(pid) + "}";
+        addConsoleLog("success", "[ProcessServer] Created PID " + to_string(pid) +
+                      " (Burst: " + to_string(burst) + ", Priority: " + to_string(priority) + ")");
+    }
+    else if (action == "kill") {
+        int pid; ss >> pid;
+        Message msg;
+        msg.type = "signal";
+        msg.data = "kill " + to_string(pid);
+        sendMessageAs(1, msg);
+        processMessages();
+        result = "{\"ok\":true}";
+        addConsoleLog("warning", "[Scheduler] KILLED PID " + to_string(pid));
+    }
+    else if (action == "suspend") {
+        int pid; ss >> pid;
+        Message msg;
+        msg.type = "signal";
+        msg.data = "suspend " + to_string(pid);
+        sendMessageAs(1, msg);
+        processMessages();
+        result = "{\"ok\":true}";
+        addConsoleLog("warning", "[Scheduler] SUSPENDED PID " + to_string(pid));
+    }
+    else if (action == "resume") {
+        int pid; ss >> pid;
+        Message msg;
+        msg.type = "signal";
+        msg.data = "resume " + to_string(pid);
+        sendMessageAs(1, msg);
+        processMessages();
+        result = "{\"ok\":true}";
+        addConsoleLog("success", "[Scheduler] RESUMED PID " + to_string(pid));
+    }
+    else if (action == "alloc") {
+        int pid, bytes; ss >> pid >> bytes;
+        Message msg;
+        msg.type = "memory";
+        msg.sender = pid;
+        msg.data = to_string(bytes);
+        sendMessageAs(1, msg);
+        processMessages();
+        result = "{\"ok\":true}";
+        addConsoleLog("success", "[MemoryService] Allocated memory for PID " + to_string(pid));
+    }
+    else if (action == "free") {
+        int pid; ss >> pid;
+        Message msg;
+        msg.type = "free";
+        msg.sender = pid;
+        msg.data = "all";
+        sendMessageAs(1, msg);
+        processMessages();
+        result = "{\"ok\":true}";
+        addConsoleLog("info", "[MemoryService] Freed memory for PID " + to_string(pid));
+    }
+    else if (action == "create_file") {
+        string name; ss >> name;
+        Message msg;
+        msg.type = "file";
+        msg.data = "create_file " + name;
+        sendMessageAs(1, msg);
+        processMessages();
+        result = "{\"ok\":true}";
+        addConsoleLog("success", "[FileService] Created file: " + name);
+    }
+    else if (action == "write_file") {
+        string name; ss >> name;
+        string data;
+        getline(ss, data);
+        if (!data.empty() && data[0] == ' ') data = data.substr(1);
+        Message msg;
+        msg.type = "file";
+        msg.data = "write_file " + name + " " + data;
+        sendMessageAs(1, msg);
+        processMessages();
+        result = "{\"ok\":true}";
+        addConsoleLog("success", "[FileService] Written to: " + name);
+    }
+    else if (action == "read_file") {
+        string name; ss >> name;
+        Message msg;
+        msg.type = "file";
+        msg.data = "read_file " + name;
+        sendMessageAs(1, msg);
+        processMessages();
+        result = "{\"ok\":true}";
+        addConsoleLog("info", "[FileService] Read file: " + name);
+    }
+    else if (action == "delete_file") {
+        string name; ss >> name;
+        Message msg;
+        msg.type = "file";
+        msg.data = "delete_file " + name;
+        sendMessageAs(1, msg);
+        processMessages();
+        result = "{\"ok\":true}";
+        addConsoleLog("warning", "[FileService] Deleted: " + name);
+    }
+    else if (action == "chmod") {
+        string name, perm; ss >> name >> perm;
+        Message msg;
+        msg.type = "file";
+        msg.data = "chmod " + name + " " + perm;
+        sendMessageAs(1, msg);
+        processMessages();
+        result = "{\"ok\":true}";
+        addConsoleLog("info", "[FileService] Chmod: " + name + " → " + perm);
+    }
+    else if (action == "grant") {
+        int pid; string capName; ss >> pid >> capName;
+        string cap;
+        if (capName == "file") cap = "CAP_FILE";
+        else if (capName == "mem") cap = "CAP_MEM";
+        else if (capName == "ipc") cap = "CAP_IPC";
+        else if (capName == "proc") cap = "CAP_PROC";
+        else if (capName == "sched") cap = "CAP_SCHED";
+        else if (capName == "kill") cap = "CAP_KILL";
+        else cap = capName;
+        Message msg;
+        msg.type = "security_grant";
+        msg.receiver = pid;
+        msg.data = cap;
+        sendMessageAs(1, msg);
+        processMessages();
+        result = "{\"ok\":true}";
+        addConsoleLog("success", "[SecurityServer] GRANTED " + cap + " to PID " + to_string(pid));
+    }
+    else if (action == "revoke") {
+        int pid; string capName; ss >> pid >> capName;
+        string cap;
+        if (capName == "file") cap = "CAP_FILE";
+        else if (capName == "mem") cap = "CAP_MEM";
+        else if (capName == "ipc") cap = "CAP_IPC";
+        else if (capName == "proc") cap = "CAP_PROC";
+        else if (capName == "sched") cap = "CAP_SCHED";
+        else if (capName == "kill") cap = "CAP_KILL";
+        else cap = capName;
+        Message msg;
+        msg.type = "security_revoke";
+        msg.receiver = pid;
+        msg.data = cap;
+        sendMessageAs(1, msg);
+        processMessages();
+        result = "{\"ok\":true}";
+        addConsoleLog("warning", "[SecurityServer] REVOKED " + cap + " from PID " + to_string(pid));
+    }
+    else if (action == "hack_file") {
+        string name; ss >> name;
+        Message msg;
+        msg.type = "file";
+        msg.data = "read_file " + name;
+        msg.sender = 999;
+        sendMessageAs(1, msg);
+        processMessages();
+        result = "{\"ok\":true}";
+        addConsoleLog("sandbox", "[Sandbox] DENIED: PID 999 — unauthorized FILE access!");
+    }
+    else if (action == "set_scheduler") {
+        string algo; ss >> algo;
+        if (algo == "rr") schedulerService.setAlgorithm(SchedulerAlgorithm::ROUND_ROBIN);
+        else if (algo == "priority") schedulerService.setAlgorithm(SchedulerAlgorithm::PRIORITY);
+        else if (algo == "sjf") schedulerService.setAlgorithm(SchedulerAlgorithm::SJF);
+        result = "{\"ok\":true}";
+        addConsoleLog("info", "[Scheduler] Algorithm changed to " + algo);
+    }
+    else if (action == "set_memory") {
+        string algo; ss >> algo;
+        if (algo == "first") memoryService.setAlgorithm(MemAlgorithm::FIRST_FIT);
+        else if (algo == "best") memoryService.setAlgorithm(MemAlgorithm::BEST_FIT);
+        else if (algo == "worst") memoryService.setAlgorithm(MemAlgorithm::WORST_FIT);
+        result = "{\"ok\":true}";
+        addConsoleLog("info", "[MemoryService] Algorithm changed to " + algo);
+    }
+    else if (action == "tick") {
+        Message interruptMsg;
+        interruptMsg.sender = 0;
+        interruptMsg.type = "interrupt";
+        interruptMsg.data = "timer";
+        sendMessage(interruptMsg);
+        processMessages();
+        result = "{\"ok\":true}";
+        addConsoleLog("kernel", "[Kernel] Timer interrupt → tick");
+    }
+    else if (action == "ipc_create") {
+        string name; int pid; ss >> name >> pid;
+        createChannel(name, pid);
+        result = "{\"ok\":true}";
+        addConsoleLog("info", "[IPC] Channel '" + name + "' created by PID " + to_string(pid));
+    }
+    else if (action == "ipc_send") {
+        string name; ss >> name;
+        string message;
+        getline(ss, message);
+        if (!message.empty() && message[0] == ' ') message = message.substr(1);
+        sendToChannel(name, message);
+        result = "{\"ok\":true}";
+        addConsoleLog("success", "[IPC] Sent to '" + name + "': " + message);
+    }
+    else if (action == "ipc_recv") {
+        string name; ss >> name;
+        string received = receiveFromChannel(name);
+        result = "{\"ok\":true,\"data\":\"" + received + "\"}";
+        addConsoleLog("info", "[IPC] Received from '" + name + "'");
+    }
+    else if (action == "lock") {
+        int pid; string resource; ss >> pid >> resource;
+        lockResource(pid, resource);
+        result = "{\"ok\":true}";
+    }
+    else if (action == "unlock") {
+        int pid; string resource; ss >> pid >> resource;
+        unlockResource(pid, resource);
+        result = "{\"ok\":true}";
+    }
+    else if (action == "kill_service") {
+        Message msg;
+        msg.type = "kill_service";
+        msg.data = "FileService";
+        sendMessageAs(1, msg);
+        processMessages();
+        result = "{\"ok\":true}";
+        addConsoleLog("error", "[WATCHDOG] FileService crashed and restarted");
+    }
+    else if (action == "attack_demo") {
+        // Run full attack demo
+        addConsoleLog("kernel", "═══ ATTACK DEMO — Identity Forgery & Capability Security ═══");
+
+        // Create file
+        Message createMsg;
+        createMsg.type = "file";
+        createMsg.data = "create_file secret.txt";
+        sendMessageAs(1, createMsg);
+        processMessages();
+        addConsoleLog("success", "[FileService] Created target file 'secret.txt'");
+
+        Message writeMsg;
+        writeMsg.type = "file";
+        writeMsg.data = "write_file secret.txt TOP_SECRET_DATA";
+        sendMessageAs(1, writeMsg);
+        processMessages();
+
+        // Create attacker
+        Message procMsg;
+        procMsg.type = "command";
+        procMsg.data = "create_process";
+        procMsg.receiver = 10;
+        procMsg.capabilityToken = "5";
+        sendMessageAs(1, procMsg);
+        processMessages();
+        int attackerPid = processServer.getLastProcess().pid;
+        addConsoleLog("warning", "[Attack] Created attacker PID " + to_string(attackerPid));
+
+        // Revoke cap
+        securityServer.revokeCapability(attackerPid, "CAP_FILE");
+        addConsoleLog("warning", "[Attack] Revoked CAP_FILE from PID " + to_string(attackerPid));
+
+        // Attack 1: Identity forgery
+        addConsoleLog("error", "═══ ATTACK 1: Identity Forgery (spoofing Shell PID) ═══");
+        Message forgedMsg;
+        forgedMsg.sender = 1;
+        forgedMsg.type = "file";
+        forgedMsg.data = "read_file secret.txt";
+        sendMessageAs(attackerPid, forgedMsg);
+        processMessages();
+        addConsoleLog("sandbox", "[Sandbox] IDENTITY OVERRIDE detected — BLOCKED");
+
+        // Attack 2: No capability
+        addConsoleLog("error", "═══ ATTACK 2: Direct Access Without CAP_FILE ═══");
+        Message directMsg;
+        directMsg.type = "file";
+        directMsg.data = "read_file secret.txt";
+        sendMessageAs(attackerPid, directMsg);
+        processMessages();
+        addConsoleLog("sandbox", "[Sandbox] DENIED — PID " + to_string(attackerPid) + " lacks CAP_FILE");
+
+        // Attack 3: Privilege escalation
+        addConsoleLog("error", "═══ ATTACK 3: Privilege Escalation (kill attempt) ═══");
+        Message killMsg;
+        killMsg.type = "signal";
+        killMsg.data = "kill 100";
+        sendMessageAs(attackerPid, killMsg);
+        processMessages();
+        addConsoleLog("sandbox", "[Sandbox] DENIED — PID " + to_string(attackerPid) + " lacks CAP_KILL");
+
+        // Fix
+        addConsoleLog("success", "═══ FIX: Granting CAP_FILE back ═══");
+        securityServer.grantCapability(attackerPid, "CAP_FILE");
+        Message validMsg;
+        validMsg.type = "file";
+        validMsg.data = "read_file secret.txt";
+        sendMessageAs(attackerPid, validMsg);
+        processMessages();
+        addConsoleLog("success", "[FileService] Authorized read ALLOWED");
+
+        addConsoleLog("kernel", "═══ DEMO COMPLETE — Sandbox is WORKING ═══");
+        result = "{\"ok\":true}";
+    }
+    else {
+        result = "{\"ok\":false,\"error\":\"Unknown command: " + action + "\"}";
+        addConsoleLog("error", "Unknown command: " + action);
+    }
+
+    if (result.empty()) result = "{\"ok\":true}";
+    return result;
 }

@@ -30,6 +30,12 @@ struct IPCChannel {
     std::queue<std::string> buffer;
 };
 
+// Console log entry for dashboard
+struct ConsoleEntry {
+    std::string type;   // "info", "success", "error", "kernel", "sandbox", "warning"
+    std::string msg;
+};
+
 class Kernel {
 private:
     MessageBus messageBus;
@@ -48,6 +54,10 @@ private:
     // IPC Channels
     std::map<std::string, IPCChannel> channels;
 
+    // Console log buffer (for dashboard)
+    std::vector<ConsoleEntry> consoleLog;
+    OS_Mutex consoleMutex;
+
     // Deadlock detection helpers
     bool hasCycleDFS(int node, std::map<int, std::vector<int>>& graph,
                      std::set<int>& visited, std::set<int>& inStack,
@@ -56,7 +66,9 @@ private:
 public:
     Kernel();
 
+    // === IDENTITY-SAFE MESSAGE API ===
     void sendMessage(Message msg);
+    void sendMessageAs(int truePid, Message msg);
     void processMessages();
 
     void startScheduler();
@@ -64,7 +76,7 @@ public:
 
     bool isRunning() { return running; }
 
-    // Expose services
+    // Expose services (read-only display operations)
     ProcessServer& getProcessServer() { return processServer; }
     SchedulerService& getSchedulerService() { return schedulerService; }
     MemoryService& getMemoryService() { return memoryService; }
@@ -86,6 +98,14 @@ public:
     bool sendToChannel(const std::string& name, const std::string& message);
     std::string receiveFromChannel(const std::string& name);
     void listChannels();
+
+    // === HTTP API SUPPORT ===
+    std::string toJSON();                                    // Full state as JSON
+    std::string executeCommand(const std::string& cmd);      // Execute command, return JSON result
+    void addConsoleLog(const std::string& type, const std::string& msg);
+    std::string getConsoleJSON(int lastN = 50);
+    std::string getChannelsJSON();
+    std::string getResourcesJSON();
 };
 
 #endif

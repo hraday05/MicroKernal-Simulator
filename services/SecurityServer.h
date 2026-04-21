@@ -18,9 +18,16 @@ public:
     void revokeCapability(int pid, const std::string& cap);
     bool hasCapability(int pid, const std::string& cap);
     void initDefaultCapabilities(int pid);
+    void initShellCapabilities(int pid);   // Shell gets ALL capabilities
     void removeProcess(int pid);
     void printCapabilities(int pid);
     void printAllCapabilities();
+
+    // Master sandbox validation — checks capability for ANY message type
+    bool validateMessage(int senderPid, const Message& msg);
+
+    // JSON export for HTTP API
+    std::string toJSON();
 };
 
 #endif

@@ -1,6 +1,7 @@
 #ifndef SCHEDULER_SERVICE_H
 #define SCHEDULER_SERVICE_H
 
+#include <string>
 #include "ProcessServer.h"
 #include "Service.h"
 #include <vector>
@@ -52,6 +53,15 @@ public:
     void printGanttChart();
     void printDetailedLog();
     void printStats();
+
+    // JSON export for HTTP API
+    std::string toJSON();
+    int getCurrentTime() { return currentTime; }
+    int getContextSwitches() { return totalContextSwitches; }
+    int getCompletions() { return totalCompletions; }
+    int getCurrentPid() { return hasCurrent ? currentRunning.pid : -1; }
+    int getTimeQuantum() { return timeQuantum; }
+    std::vector<ScheduleEntry>& getExecutionLog() { return executionLog; }
 };
 
 #endif

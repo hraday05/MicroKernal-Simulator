@@ -14,6 +14,7 @@
         <div class="header-left">
             <div class="logo-icon">⚙</div>
             <h1>MicroKernel OS <span class="version">v5.0</span></h1>
+            <div class="connection-dot disconnected" id="connection-status" title="Disconnected"></div>
         </div>
         <div class="header-status">
             <div class="status-chip" id="sched-chip">RR</div>
@@ -83,6 +84,7 @@
                     <button class="cmd-btn danger" data-cmd="revoke" title="Revoke capability">❌ Revoke</button>
                     <button class="cmd-btn" data-cmd="capabilities" title="View capabilities">📋 Caps</button>
                     <button class="cmd-btn warn" data-cmd="hack_file" title="Hack attempt">🏴‍☠️ Hack</button>
+                    <button class="cmd-btn danger" data-cmd="attack_demo" title="Full attack demo">🚀 Attack Demo</button>
                 </div>
             </div>
 
@@ -116,6 +118,13 @@
                     <button class="cmd-btn danger" data-cmd="kill_service" title="Crash FileService">💣 Crash</button>
                     <button class="cmd-btn" data-cmd="clear" title="Clear console">🧹 Clear</button>
                 </div>
+            </div>
+
+            <div class="cmd-group demo-group">
+                <button class="demo-btn" id="btn-live-demo" title="Run full automated demo of all features">
+                    🎬 Live Demo
+                </button>
+                <p class="demo-hint" id="demo-status">Click to showcase all features</p>
             </div>
         </aside>
 
@@ -173,17 +182,34 @@
                 </div>
             </div>
 
-            <!-- BOTTOM: Console -->
-            <div class="panel" id="console-panel">
-                <div class="panel-header">
-                    <h2>System Console</h2>
-                    <span class="badge" id="log-count">0 events</span>
+            <!-- BOTTOM ROW: Terminal + Console -->
+            <div class="bottom-row">
+                <!-- TERMINAL: Shows commands like CLI -->
+                <div class="panel" id="terminal-panel">
+                    <div class="panel-header">
+                        <h2>🖥 Terminal</h2>
+                        <span class="badge" id="term-count">0 commands</span>
+                    </div>
+                    <div class="terminal-output" id="terminal-output">
+                        <div class="term-line prompt">MicroKernel OS v5.0 — Connected to C++ Backend</div>
+                        <div class="term-line system">Type commands or use the sidebar buttons</div>
+                    </div>
+                    <div class="terminal-input-row">
+                        <span class="terminal-prompt">&gt;&gt;</span>
+                        <input type="text" id="terminal-input" placeholder="Type command... (e.g. create_process 30 5)" autocomplete="off">
+                    </div>
                 </div>
-                <div class="console-output" id="console-output">
-                    <div class="console-line boot">[00:00.000] MicroKernel OS v5.0 booted</div>
-                    <div class="console-line boot">[00:00.000] Services initialized: ProcessServer, MemoryService, FileService, SchedulerService, SecurityServer</div>
-                    <div class="console-line boot">[00:00.000] Shell PID 1 granted CAP_FILE + CAP_MEM</div>
-                    <div class="console-line info">[00:00.000] Type 'help' or click a command button to begin</div>
+
+                <!-- CONSOLE: System events from backend -->
+                <div class="panel" id="console-panel">
+                    <div class="panel-header">
+                        <h2>System Console</h2>
+                        <span class="badge" id="log-count">0 events</span>
+                    </div>
+                    <div class="console-output" id="console-output">
+                        <div class="console-line boot">[00:00.000] MicroKernel OS v5.0 — Backend-Connected Dashboard</div>
+                        <div class="console-line info">[00:00.000] All commands execute on the REAL C++ kernel</div>
+                    </div>
                 </div>
             </div>
         </section>

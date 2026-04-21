@@ -305,3 +305,34 @@ void MemoryService::printStats() {
     }
     cout << "=======================================\n\n";
 }
+
+// =====================================================
+//  JSON EXPORT FOR HTTP API
+// =====================================================
+
+string MemoryService::toJSON() {
+    stringstream ss;
+    int usedPages = 0, freePages = 0;
+    for (auto& b : blocks) {
+        if (b.free) freePages += b.size;
+        else usedPages += b.size;
+    }
+
+    ss << "{";
+    ss << "\"algorithm\":\"" << getAlgorithmName() << "\",";
+    ss << "\"totalPages\":" << totalPages << ",";
+    ss << "\"pageSize\":" << pageSize << ",";
+    ss << "\"usedPages\":" << usedPages << ",";
+    ss << "\"freePages\":" << freePages << ",";
+    ss << "\"blocks\":[";
+    for (size_t i = 0; i < blocks.size(); i++) {
+        auto& b = blocks[i];
+        ss << "{\"start\":" << b.startFrame
+           << ",\"size\":" << b.size
+           << ",\"free\":" << (b.free ? "true" : "false")
+           << ",\"pid\":" << b.ownerPid << "}";
+        if (i < blocks.size() - 1) ss << ",";
+    }
+    ss << "]}";
+    return ss.str();
+}

@@ -237,3 +237,30 @@ void FileService::listFiles() {
     cout << "  +--------------------+-------+------+------+-------+\n";
     cout << "  =====================================================\n\n";
 }
+
+// =====================================================
+//  JSON EXPORT FOR HTTP API
+// =====================================================
+
+string FileService::toJSON() {
+    stringstream ss;
+    ss << "[";
+    int idx = 0;
+    for (auto& entry : fileTable) {
+        // Get file size
+        string path = getPath(entry.first);
+        ifstream f(path, ios::ate);
+        int size = f.is_open() ? (int)f.tellg() : 0;
+        f.close();
+
+        if (idx > 0) ss << ",";
+        ss << "{\"name\":\"" << entry.first << "\""
+           << ",\"owner\":" << entry.second.ownerPid
+           << ",\"readable\":" << (entry.second.readable ? "true" : "false")
+           << ",\"writable\":" << (entry.second.writable ? "true" : "false")
+           << ",\"size\":" << size << "}";
+        idx++;
+    }
+    ss << "]";
+    return ss.str();
+}

@@ -28,6 +28,10 @@ public:
     FileService();
     void handleMessage(Message msg);
     void listFiles();
+
+    // JSON export for HTTP API
+    std::string toJSON();
+    std::map<std::string, VirtualFile>& getFileTable() { return fileTable; }
 };
 
 #endif

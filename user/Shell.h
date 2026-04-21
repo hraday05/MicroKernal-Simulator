@@ -8,6 +8,7 @@ class Shell {
 private:
     Kernel* kernel;
     void printHelp();
+    void runAttackDemo();  // Attack/defense demo for presentation
 
 public:
     Shell(Kernel* k);

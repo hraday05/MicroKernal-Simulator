@@ -40,6 +40,9 @@ public:
     void printLog(int lastN = 20);
     std::string formatTimestamp(TimeStamp ts);
     int getEntryCount();
+
+    // JSON export for HTTP API
+    std::string toJSON(int lastN = 50);
 };
 
 // Global system logger

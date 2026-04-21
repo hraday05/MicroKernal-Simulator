@@ -37,6 +37,9 @@ public:
     void printMemoryMap();
     void setAlgorithm(MemAlgorithm algo);
     std::string getAlgorithmName();
+
+    // JSON export for HTTP API
+    std::string toJSON();
 };
 
 #endif
