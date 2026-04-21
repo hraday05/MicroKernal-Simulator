@@ -60,6 +60,7 @@ void HttpServer::sendResponse(SOCKET sock, int code, const string& contentType, 
     response << "Access-Control-Allow-Origin: *\r\n";
     response << "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n";
     response << "Access-Control-Allow-Headers: Content-Type\r\n";
+    response << "Cache-Control: no-cache, no-store, must-revalidate\r\n";
     response << "Connection: close\r\n";
     response << "\r\n";
     response << body;
