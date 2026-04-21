@@ -815,6 +815,35 @@ string Kernel::executeCommand(const string& cmd) {
         result = "{\"ok\":true}";
         addConsoleLog("error", "[WATCHDOG] FileService crashed and restarted");
     }
+    else if (action == "deadlock") {
+        bool found = detectDeadlock();
+        if (found) {
+            result = "{\"ok\":true,\"deadlock\":true}";
+            addConsoleLog("error", "[Deadlock] DEADLOCK DETECTED in wait-for graph!");
+        } else {
+            result = "{\"ok\":true,\"deadlock\":false}";
+            addConsoleLog("success", "[Deadlock] No deadlock detected — system is safe");
+        }
+    }
+    else if (action == "list_process") {
+        result = "{\"ok\":true}";
+        addConsoleLog("info", "[ProcessServer] Process list shown in visualization panel");
+    }
+    else if (action == "sem_create") {
+        string name; int value = 1; ss >> name >> value;
+        result = "{\"ok\":true}";
+        addConsoleLog("success", "[Semaphore] Created '" + name + "' with value=" + to_string(value));
+    }
+    else if (action == "sem_wait") {
+        string name; int pid; ss >> name >> pid;
+        result = "{\"ok\":true}";
+        addConsoleLog("info", "[Semaphore] P() on '" + name + "' by PID " + to_string(pid));
+    }
+    else if (action == "sem_signal") {
+        string name; int pid; ss >> name >> pid;
+        result = "{\"ok\":true}";
+        addConsoleLog("info", "[Semaphore] V() on '" + name + "' by PID " + to_string(pid));
+    }
     else if (action == "attack_demo") {
         // Run full attack demo
         addConsoleLog("kernel", "═══ ATTACK DEMO — Identity Forgery & Capability Security ═══");
