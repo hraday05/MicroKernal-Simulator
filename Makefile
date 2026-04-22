@@ -1,11 +1,17 @@
 # ============================================
 # MicroKernel OS Simulator v5.0
-# Cross-platform Makefile (macOS / Linux)
+# Cross-platform Makefile (macOS / Linux / Windows-MinGW)
 # ============================================
 
 CXX = g++
 CXXFLAGS = -std=c++14 -Wall -pthread
 TARGET = microkernel
+
+# Detect Windows for Winsock
+ifeq ($(OS),Windows_NT)
+    LDFLAGS = -lws2_32
+    TARGET = microkernel.exe
+endif
 
 # Source files
 SRCS = main.cpp \
@@ -18,6 +24,7 @@ SRCS = main.cpp \
        services/MemoryService.cpp \
        services/FileService.cpp \
        services/SecurityServer.cpp \
+       server/HttpServer.cpp \
        user/Shell.cpp
 
 # Default target
@@ -27,19 +34,14 @@ all: $(TARGET)
 	@echo ""
 
 $(TARGET): $(SRCS)
-	$(CXX) $(CXXFLAGS) -o $(TARGET) $(SRCS)
+	$(CXX) $(CXXFLAGS) -o $(TARGET) $(SRCS) $(LDFLAGS)
 
 # Run the simulator
 run: $(TARGET)
 	./$(TARGET)
 
-# Run the dashboard
-dashboard:
-	@echo "Starting dashboard at http://localhost:8080"
-	@cd dashboard && python3 -m http.server 8080
-
 # Clean build artifacts
 clean:
 	rm -f $(TARGET)
 
-.PHONY: all run dashboard clean
+.PHONY: all run clean

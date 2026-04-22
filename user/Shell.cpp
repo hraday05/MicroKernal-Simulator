@@ -68,15 +68,16 @@ void Shell::printHelp() {
 // =====================================================
 
 void Shell::runAttackDemo() {
-    OS_LockGuard lock(printMutex);
-    cout << "\n";
-    cout << "  ================================================================\n";
-    cout << "   ATTACK DEMO — Identity Forgery & Capability-Based Security\n";
-    cout << "  ================================================================\n\n";
-    cout << "  This demo creates a malicious process and shows how the kernel\n";
-    cout << "  sandbox prevents identity forgery and unauthorized access.\n";
-    cout << "  ================================================================\n\n";
-    lock.~OS_LockGuard();
+    {
+        OS_LockGuard lock(printMutex);
+        cout << "\n";
+        cout << "  ================================================================\n";
+        cout << "   ATTACK DEMO — Identity Forgery & Capability-Based Security\n";
+        cout << "  ================================================================\n\n";
+        cout << "  This demo creates a malicious process and shows how the kernel\n";
+        cout << "  sandbox prevents identity forgery and unauthorized access.\n";
+        cout << "  ================================================================\n\n";
+    }
 
     // Step 1: Create a file to attack
     {
@@ -456,9 +457,7 @@ void Shell::run() {
       ss >> cmd >> pid >> amount;
       if (ss.fail()) { cout << "Usage: alloc <pid> <bytes>\n"; continue; }
       msg.data = to_string(amount);
-      // NOTE: sender will be stamped to SHELL_PID by kernel
-      // We set sender to pid here for the memory service to know the target
-      msg.sender = pid;
+      msg.receiver = pid;  // Target PID in receiver field
     }
 
     // --- free <pid> ---
@@ -467,7 +466,7 @@ void Shell::run() {
       stringstream ss(command); string cmd; int pid;
       ss >> cmd >> pid;
       if (ss.fail()) { cout << "Usage: free <pid>\n"; continue; }
-      msg.sender = pid;
+      msg.receiver = pid;  // Target PID in receiver field
       msg.data = "all";
     }
 

@@ -8,12 +8,12 @@
 
 class PCB {
 public:
-    int pid;
+    int pid = 0;
     std::string name;
-    int burstTime;        // original burst time (never changes)
-    int remainingTime;    // remaining burst for scheduling
-    int priority;         // lower number = higher priority (1=highest, 10=lowest)
-    std::string state;    // READY, RUNNING, BLOCKED, DEAD
+    int burstTime = 0;        // original burst time (never changes)
+    int remainingTime = 0;    // remaining burst for scheduling
+    int priority = 5;         // lower number = higher priority (1=highest, 10=lowest)
+    std::string state;        // READY, RUNNING, BLOCKED, DEAD
     std::vector<int> pageTable;
 };
 

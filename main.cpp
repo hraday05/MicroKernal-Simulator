@@ -26,7 +26,8 @@ int main() {
 
     cout << "MicroKernel OS Started...\n";
 
-    kernel.startScheduler();       // Start CPU scheduler thread
+    // NOTE: Scheduler NOT auto-started — processes stay in READY state
+    // Use 'tick' command or '▶ Auto' button to run scheduling manually
 
     // Start HTTP server (serves dashboard + API)
     if (httpServer.start()) {

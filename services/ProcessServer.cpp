@@ -16,6 +16,16 @@ ProcessServer::ProcessServer() {
 }
 
 PCB ProcessServer::getLastProcess() {
+    if (processes.empty()) {
+        PCB empty;
+        empty.pid = -1;
+        empty.name = "NONE";
+        empty.burstTime = 0;
+        empty.remainingTime = 0;
+        empty.priority = 0;
+        empty.state = "DEAD";
+        return empty;
+    }
     return processes.back();
 }
 

@@ -18,7 +18,9 @@ class SchedulerService : public Service {
 private:
     std::vector<PCB> readyList;
     std::vector<PCB> blockedList;   // suspended/blocked processes
+    std::vector<PCB> completedList; // recently dead (shown on dashboard)
     int timeQuantum;
+    int lastEffectiveQuantum;       // adaptive quantum used in last tick
     ProcessServer* processServer;
     SchedulerAlgorithm algorithm;
 
@@ -61,6 +63,7 @@ public:
     int getCompletions() { return totalCompletions; }
     int getCurrentPid() { return hasCurrent ? currentRunning.pid : -1; }
     int getTimeQuantum() { return timeQuantum; }
+    int getEffectiveQuantum() { return lastEffectiveQuantum; }
     std::vector<ScheduleEntry>& getExecutionLog() { return executionLog; }
 };
 

@@ -113,7 +113,8 @@ void MemoryService::handleMessage(Message msg) {
         try { amount = stoi(msg.data); } catch(...) { return; }
 
         int pagesNeeded = (amount + pageSize - 1) / pageSize;
-        int pid = msg.sender;
+        // Target PID: use msg.receiver if set (Shell delegating), else msg.sender
+        int pid = (msg.receiver > 0) ? msg.receiver : msg.sender;
 
         // Find suitable block using current algorithm
         int blockIdx = -1;
@@ -142,7 +143,9 @@ void MemoryService::handleMessage(Message msg) {
         }
 
     } else if (msg.type == "free" || msg.type == "process_dead") {
-        freeAll(msg.sender);
+        // Target PID: use msg.receiver if set, else msg.sender
+        int pid = (msg.receiver > 0) ? msg.receiver : msg.sender;
+        freeAll(pid);
     }
 }
 
