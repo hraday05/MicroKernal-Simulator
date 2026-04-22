@@ -38,11 +38,43 @@ async function sendCommand(cmd) {
             body: JSON.stringify({ cmd })
         });
         const data = await res.json();
-        if (data.ok) termWrite(data.pid ? `OK (PID: ${data.pid})` : 'OK', 'output');
-        else termWrite(`Error: ${data.error || 'failed'}`, 'output');
+        if (data.ok) {
+            if (data.data === 'help') {
+                termWrite('  ── PROCESS ──────────────────────────────────', 'system');
+                termWrite('  create_process [burst] [priority]  — Create process', 'output');
+                termWrite('  kill <pid>  |  suspend <pid>  |  resume <pid>', 'output');
+                termWrite('  ps  |  list_process', 'output');
+                termWrite('  ── SCHEDULING ───────────────────────────────', 'system');
+                termWrite('  tick  |  set_scheduler <rr|priority|sjf>', 'output');
+                termWrite('  schedule_visual  |  schedstat', 'output');
+                termWrite('  ── MEMORY ───────────────────────────────────', 'system');
+                termWrite('  alloc <pid> <bytes>  |  free <pid>', 'output');
+                termWrite('  memstat  |  memmap  |  set_memory <first|best|worst>', 'output');
+                termWrite('  ── FILE SYSTEM ──────────────────────────────', 'system');
+                termWrite('  create_file | read_file | write_file | delete_file', 'output');
+                termWrite('  chmod <name> <perm>  |  ls', 'output');
+                termWrite('  ── SECURITY ─────────────────────────────────', 'system');
+                termWrite('  grant <pid> <cap>  |  revoke <pid> <cap>', 'output');
+                termWrite('  capabilities [pid]  |  hack_file  |  attack_demo', 'output');
+                termWrite('  ── IPC & CONCURRENCY ────────────────────────', 'system');
+                termWrite('  ipc_create | ipc_send | ipc_recv | ipc_list', 'output');
+                termWrite('  lock <pid> <res>  |  unlock <pid> <res>', 'output');
+                termWrite('  deadlock  |  resources', 'output');
+                termWrite('  ── SYSTEM ───────────────────────────────────', 'system');
+                termWrite('  syslog  |  kill_service  |  help  |  clear', 'output');
+            } else if (data.pid) {
+                termWrite(`  OK (PID: ${data.pid})`, 'output');
+            } else if (data.data && data.data !== 'help') {
+                termWrite(`  ${data.data}`, 'output');
+            } else {
+                termWrite('  OK', 'output');
+            }
+        } else {
+            termWrite(`  Error: ${data.error || 'failed'}`, 'output');
+        }
         return data;
     } catch (e) {
-        termWrite(`[API Error] ${e.message}`, 'output');
+        termWrite(`  [API Error] ${e.message}`, 'output');
         return { ok: false };
     }
 }
@@ -170,34 +202,47 @@ function showModal(title, fields, callback) {
 const capOpts = [{value:'file',label:'CAP_FILE'},{value:'mem',label:'CAP_MEM'},{value:'ipc',label:'CAP_IPC'},{value:'proc',label:'CAP_PROC'},{value:'sched',label:'CAP_SCHED'},{value:'kill',label:'CAP_KILL'}];
 const commands = {
     create_process:()=>showModal('Create Process',[{id:'burst',label:'Burst Time',type:'number',default:'30'},{id:'priority',label:'Priority (1-10)',type:'number',default:'5'}],v=>sendCommand(`create_process ${v.burst||30} ${Math.max(1,Math.min(10,parseInt(v.priority)||5))}`)),
-    list_process:()=>sendCommand('list_process'), ps:()=>log('kernel','Process snapshot in visualization panel'),
+    list_process:()=>sendCommand('list_process'),
+    ps:()=>sendCommand('ps'),
     kill:()=>showModal('Kill',[{id:'pid',label:'PID',type:'number',placeholder:'100'}],v=>sendCommand(`kill ${v.pid}`)),
     suspend:()=>showModal('Suspend',[{id:'pid',label:'PID',type:'number',placeholder:'100'}],v=>sendCommand(`suspend ${v.pid}`)),
     resume:()=>showModal('Resume',[{id:'pid',label:'PID',type:'number',placeholder:'100'}],v=>sendCommand(`resume ${v.pid}`)),
-    set_rr:()=>{sendCommand('set_scheduler rr');uBtn('#sched-cmds','set_rr');}, set_priority:()=>{sendCommand('set_scheduler priority');uBtn('#sched-cmds','set_priority');}, set_sjf:()=>{sendCommand('set_scheduler sjf');uBtn('#sched-cmds','set_sjf');},
-    tick:()=>sendCommand('tick'), gantt:()=>log('info','Gantt chart rendered above'), schedstat:()=>log('info','Stats in header bar'),
+    set_rr:()=>{sendCommand('set_scheduler rr');uBtn('#sched-cmds','set_rr');},
+    set_priority:()=>{sendCommand('set_scheduler priority');uBtn('#sched-cmds','set_priority');},
+    set_sjf:()=>{sendCommand('set_scheduler sjf');uBtn('#sched-cmds','set_sjf');},
+    tick:()=>sendCommand('tick'),
+    gantt:()=>sendCommand('schedule_visual'),
+    schedstat:()=>sendCommand('schedstat'),
     alloc:()=>showModal('Allocate Memory',[{id:'pid',label:'PID',type:'number',placeholder:'100'},{id:'bytes',label:'Bytes',type:'number',default:'8192'}],v=>sendCommand(`alloc ${v.pid} ${v.bytes}`)),
     free_mem:()=>showModal('Free Memory',[{id:'pid',label:'PID',type:'number',placeholder:'100'}],v=>sendCommand(`free ${v.pid}`)),
-    set_first:()=>{sendCommand('set_memory first');uBtn('#mem-cmds','set_first');}, set_best:()=>{sendCommand('set_memory best');uBtn('#mem-cmds','set_best');}, set_worst:()=>{sendCommand('set_memory worst');uBtn('#mem-cmds','set_worst');},
-    memmap:()=>log('info','Memory map rendered above'),
+    set_first:()=>{sendCommand('set_memory first');uBtn('#mem-cmds','set_first');},
+    set_best:()=>{sendCommand('set_memory best');uBtn('#mem-cmds','set_best');},
+    set_worst:()=>{sendCommand('set_memory worst');uBtn('#mem-cmds','set_worst');},
+    memmap:()=>sendCommand('memmap'),
     create_file:()=>showModal('Create File',[{id:'name',label:'Filename',placeholder:'myfile.txt'}],v=>sendCommand(`create_file ${v.name}`)),
     read_file:()=>showModal('Read File',[{id:'name',label:'Filename',placeholder:'myfile.txt'}],v=>sendCommand(`read_file ${v.name}`)),
     write_file:()=>showModal('Write File',[{id:'name',label:'Filename',placeholder:'myfile.txt'},{id:'data',label:'Content',placeholder:'Hello'}],v=>sendCommand(`write_file ${v.name} ${v.data}`)),
     delete_file:()=>showModal('Delete File',[{id:'name',label:'Filename',placeholder:'myfile.txt'}],v=>sendCommand(`delete_file ${v.name}`)),
     chmod_file:()=>showModal('Chmod',[{id:'name',label:'Filename',placeholder:'myfile.txt'},{id:'perm',label:'Permission',type:'select',options:[{value:'both',label:'Read+Write'},{value:'read',label:'Read Only'},{value:'write',label:'Write Only'},{value:'none',label:'None'}]}],v=>sendCommand(`chmod ${v.name} ${v.perm}`)),
-    ls:()=>log('info','Files shown in state'), grant:()=>showModal('Grant Cap',[{id:'pid',label:'PID',type:'number',placeholder:'100'},{id:'cap',label:'Capability',type:'select',options:capOpts}],v=>sendCommand(`grant ${v.pid} ${v.cap}`)),
+    ls:()=>sendCommand('ls'),
+    grant:()=>showModal('Grant Cap',[{id:'pid',label:'PID',type:'number',placeholder:'100'},{id:'cap',label:'Capability',type:'select',options:capOpts}],v=>sendCommand(`grant ${v.pid} ${v.cap}`)),
     revoke:()=>showModal('Revoke Cap',[{id:'pid',label:'PID',type:'number',placeholder:'100'},{id:'cap',label:'Capability',type:'select',options:capOpts}],v=>sendCommand(`revoke ${v.pid} ${v.cap}`)),
-    capabilities:()=>log('info','Capabilities in state data'),
+    capabilities:()=>sendCommand('capabilities'),
     hack_file:()=>showModal('🏴‍☠️ Hack',[{id:'name',label:'Target File',placeholder:'secret.txt'}],v=>sendCommand(`hack_file ${v.name}`)),
     attack_demo:()=>sendCommand('attack_demo'),
     lock:()=>showModal('Lock Resource',[{id:'pid',label:'PID',type:'number',placeholder:'100'},{id:'res',label:'Resource',placeholder:'fileA'}],v=>sendCommand(`lock ${v.pid} ${v.res}`)),
     unlock:()=>showModal('Unlock Resource',[{id:'pid',label:'PID',type:'number',placeholder:'100'},{id:'res',label:'Resource',placeholder:'fileA'}],v=>sendCommand(`unlock ${v.pid} ${v.res}`)),
-    deadlock:()=>sendCommand('deadlock'), resources:()=>log('info','Resources in state'),
+    deadlock:()=>sendCommand('deadlock'),
+    resources:()=>sendCommand('resources'),
     ipc_create:()=>showModal('Create Channel',[{id:'name',label:'Channel',placeholder:'data_pipe'},{id:'pid',label:'Owner PID',type:'number',placeholder:'100'}],v=>sendCommand(`ipc_create ${v.name} ${v.pid}`)),
     ipc_send:()=>showModal('Send',[{id:'name',label:'Channel',placeholder:'data_pipe'},{id:'msg',label:'Message',placeholder:'Hello'}],v=>sendCommand(`ipc_send ${v.name} ${v.msg}`)),
     ipc_recv:()=>showModal('Receive',[{id:'name',label:'Channel',placeholder:'data_pipe'}],v=>sendCommand(`ipc_recv ${v.name}`)),
-    ipc_list:()=>log('info','Channels in state'), syslog:()=>log('info','Log in state data'),
+    ipc_list:()=>sendCommand('ipc_list'),
+    syslog:()=>sendCommand('syslog'),
     kill_service:()=>sendCommand('kill_service'),
+    sem_create:()=>showModal('Create Semaphore',[{id:'name',label:'Semaphore Name',placeholder:'mutex1'},{id:'value',label:'Initial Value',type:'number',default:'1'}],v=>sendCommand(`sem_create ${v.name} ${v.value||1}`)),
+    sem_wait:()=>showModal('Semaphore P()',[{id:'name',label:'Semaphore Name',placeholder:'mutex1'},{id:'pid',label:'PID',type:'number',placeholder:'100'}],v=>sendCommand(`sem_wait ${v.name} ${v.pid}`)),
+    sem_signal:()=>showModal('Semaphore V()',[{id:'name',label:'Semaphore Name',placeholder:'mutex1'},{id:'pid',label:'PID',type:'number',placeholder:'100'}],v=>sendCommand(`sem_signal ${v.name} ${v.pid}`)),
     clear:()=>{document.getElementById('console-output').innerHTML='';document.getElementById('terminal-output').innerHTML='';lastConsoleLen=0;termCmdCount=0;},
 };
 function uBtn(g,a){document.querySelectorAll(`${g} .cmd-btn`).forEach(b=>b.classList.remove('active'));const b=document.querySelector(`[data-cmd="${a}"]`);if(b)b.classList.add('active');}

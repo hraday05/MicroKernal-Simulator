@@ -5,7 +5,7 @@
 
 class Service {
 protected:
-    MessageBus* bus;
+    MessageBus* bus = nullptr;
 public:
     virtual ~Service() {}
     virtual void handleMessage(Message msg) = 0;

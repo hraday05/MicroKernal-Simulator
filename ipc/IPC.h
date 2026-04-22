@@ -6,8 +6,8 @@
 #include "../kernel/OS_Mutex.h"
 
 struct Message {
-    int sender;
-    int receiver;
+    int sender = 0;
+    int receiver = 0;
     std::string type;
     std::string data;
     std::string capabilityToken;

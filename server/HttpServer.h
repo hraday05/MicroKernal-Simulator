@@ -38,7 +38,6 @@ private:
 
     // Response builders
     void sendResponse(SOCKET sock, int code, const std::string& contentType, const std::string& body);
-    void sendCorsHeaders(SOCKET sock, int code, const std::string& contentType, const std::string& body);
 
     // Static file serving
     std::string getMimeType(const std::string& path);

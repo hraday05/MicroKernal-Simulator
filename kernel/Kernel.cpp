@@ -68,11 +68,14 @@ void Kernel::processMessages() {
             securityServer.initDefaultCapabilities(p.pid);
         }
         else if (msg.type == "memory" || msg.type == "free") {
-            if (processServer.processExists(msg.sender)) {
+            // Target PID is in msg.receiver when sent by Shell (PID 1)
+            // Otherwise the sender IS the target (for self-allocation)
+            int targetPid = (msg.receiver > 0) ? msg.receiver : msg.sender;
+            if (processServer.processExists(targetPid)) {
                 memoryService.handleMessage(msg);
             } else {
                 OS_LockGuard lock(printMutex);
-                cout << "[Kernel] ERROR: PID " << msg.sender << " does not exist\n";
+                cout << "[Kernel] ERROR: PID " << targetPid << " does not exist\n";
             }
         }
         else if (msg.type == "command") {
@@ -629,10 +632,10 @@ string Kernel::executeCommand(const string& cmd) {
         int pid, bytes; ss >> pid >> bytes;
         Message msg;
         msg.type = "memory";
-        msg.sender = pid;   // Memory service needs the target PID
+        msg.receiver = pid;              // Target PID in receiver
         msg.data = to_string(bytes);
-        // Send directly — not through sendMessageAs which would overwrite sender to 1
-        messageBus.sendMessage(msg);
+        msg.capabilityToken = "CAP_MEM";
+        sendMessageAs(1, msg);           // Route through identity-safe path
         processMessages();
         result = "{\"ok\":true}";
         addConsoleLog("success", "[MemoryService] Allocated memory for PID " + to_string(pid));
@@ -641,9 +644,9 @@ string Kernel::executeCommand(const string& cmd) {
         int pid; ss >> pid;
         Message msg;
         msg.type = "free";
-        msg.sender = pid;   // Memory service needs the target PID
+        msg.receiver = pid;              // Target PID in receiver
         msg.data = "all";
-        messageBus.sendMessage(msg);
+        sendMessageAs(1, msg);           // Route through identity-safe path
         processMessages();
         result = "{\"ok\":true}";
         addConsoleLog("info", "[MemoryService] Freed memory for PID " + to_string(pid));
@@ -832,18 +835,54 @@ string Kernel::executeCommand(const string& cmd) {
     }
     else if (action == "sem_create") {
         string name; int value = 1; ss >> name >> value;
-        result = "{\"ok\":true}";
-        addConsoleLog("success", "[Semaphore] Created '" + name + "' with value=" + to_string(value));
+        if (semaphores.find(name) != semaphores.end()) {
+            result = "{\"ok\":false,\"error\":\"Semaphore already exists\"}";
+            addConsoleLog("warning", "[Semaphore] '" + name + "' already exists");
+        } else {
+            Semaphore sem;
+            sem.name = name;
+            sem.value = value;
+            semaphores[name] = sem;
+            result = "{\"ok\":true}";
+            addConsoleLog("success", "[Semaphore] Created '" + name + "' with value=" + to_string(value));
+        }
     }
     else if (action == "sem_wait") {
         string name; int pid; ss >> name >> pid;
-        result = "{\"ok\":true}";
-        addConsoleLog("info", "[Semaphore] P() on '" + name + "' by PID " + to_string(pid));
+        if (semaphores.find(name) == semaphores.end()) {
+            result = "{\"ok\":false,\"error\":\"Semaphore not found\"}";
+            addConsoleLog("error", "[Semaphore] '" + name + "' does not exist");
+        } else {
+            Semaphore& sem = semaphores[name];
+            sem.value--;
+            if (sem.value < 0) {
+                sem.waitQueue.push_back(pid);
+                result = "{\"ok\":true,\"blocked\":true}";
+                addConsoleLog("warning", "[Semaphore] P() on '" + name + "' — PID " + to_string(pid) + " BLOCKED (value=" + to_string(sem.value) + ")");
+            } else {
+                result = "{\"ok\":true,\"blocked\":false}";
+                addConsoleLog("success", "[Semaphore] P() on '" + name + "' — PID " + to_string(pid) + " acquired (value=" + to_string(sem.value) + ")");
+            }
+        }
     }
     else if (action == "sem_signal") {
         string name; int pid; ss >> name >> pid;
-        result = "{\"ok\":true}";
-        addConsoleLog("info", "[Semaphore] V() on '" + name + "' by PID " + to_string(pid));
+        if (semaphores.find(name) == semaphores.end()) {
+            result = "{\"ok\":false,\"error\":\"Semaphore not found\"}";
+            addConsoleLog("error", "[Semaphore] '" + name + "' does not exist");
+        } else {
+            Semaphore& sem = semaphores[name];
+            sem.value++;
+            if (!sem.waitQueue.empty()) {
+                int wokenPid = sem.waitQueue.front();
+                sem.waitQueue.erase(sem.waitQueue.begin());
+                result = "{\"ok\":true}";
+                addConsoleLog("success", "[Semaphore] V() on '" + name + "' — woke PID " + to_string(wokenPid) + " (value=" + to_string(sem.value) + ")");
+            } else {
+                result = "{\"ok\":true}";
+                addConsoleLog("info", "[Semaphore] V() on '" + name + "' by PID " + to_string(pid) + " (value=" + to_string(sem.value) + ")");
+            }
+        }
     }
     else if (action == "attack_demo") {
         // Run full attack demo
@@ -918,6 +957,68 @@ string Kernel::executeCommand(const string& cmd) {
 
         addConsoleLog("kernel", "═══ DEMO COMPLETE — Sandbox is WORKING ═══");
         result = "{\"ok\":true}";
+    }
+    // ===== DISPLAY/INFO COMMANDS (valid Shell commands routed from dashboard) =====
+    else if (action == "help") {
+        result = "{\"ok\":true,\"data\":\"help\"}";
+        addConsoleLog("info", "[Shell] Commands: create_process, kill, suspend, resume, ps, tick, "
+                      "alloc, free, memstat, memmap, set_scheduler, set_memory, "
+                      "create_file, read_file, write_file, delete_file, chmod, ls, "
+                      "grant, revoke, capabilities, hack_file, attack_demo, "
+                      "lock, unlock, deadlock, resources, "
+                      "ipc_create, ipc_send, ipc_recv, ipc_list, "
+                      "syslog, kill_service, schedule_visual, schedstat, help");
+    }
+    else if (action == "ps") {
+        // Process snapshot — data is already in /api/state
+        result = "{\"ok\":true}";
+        addConsoleLog("info", "[Shell] Process snapshot available in visualization panel");
+    }
+    else if (action == "schedule_visual") {
+        // Gantt chart — data is already in /api/state
+        result = "{\"ok\":true}";
+        addConsoleLog("info", "[Scheduler] Gantt chart available in visualization panel");
+    }
+    else if (action == "schedstat") {
+        // Scheduler stats
+        string algo = schedulerService.getAlgorithmName();
+        result = "{\"ok\":true}";
+        addConsoleLog("info", "[Scheduler] Algorithm: " + algo +
+                      " | CPU Time: " + to_string(schedulerService.getCurrentTime()));
+    }
+    else if (action == "memstat") {
+        result = "{\"ok\":true}";
+        addConsoleLog("info", "[MemoryService] Memory stats available in visualization panel");
+    }
+    else if (action == "memmap") {
+        result = "{\"ok\":true}";
+        addConsoleLog("info", "[MemoryService] Memory map available in visualization panel");
+    }
+    else if (action == "ls") {
+        result = "{\"ok\":true}";
+        addConsoleLog("info", "[FileService] File listing available in state data");
+    }
+    else if (action == "capabilities") {
+        int pid = -1;
+        ss >> pid;
+        result = "{\"ok\":true}";
+        if (pid > 0) {
+            addConsoleLog("info", "[SecurityServer] Capabilities for PID " + to_string(pid) + " available in state data");
+        } else {
+            addConsoleLog("info", "[SecurityServer] All capabilities available in state data");
+        }
+    }
+    else if (action == "resources") {
+        result = "{\"ok\":true}";
+        addConsoleLog("info", "[ResourceMgr] Resource table available in state data");
+    }
+    else if (action == "ipc_list") {
+        result = "{\"ok\":true}";
+        addConsoleLog("info", "[IPC] Channel listing available in state data");
+    }
+    else if (action == "syslog") {
+        result = "{\"ok\":true}";
+        addConsoleLog("info", "[Logger] System log available in console panel");
     }
     else {
         result = "{\"ok\":false,\"error\":\"Unknown command: " + action + "\"}";

@@ -19,15 +19,22 @@
 // Resource lock for deadlock detection
 struct ResourceLock {
     std::string name;
-    int heldBy;                    // PID holding it, -1 if free
+    int heldBy = -1;               // PID holding it, -1 if free
     std::vector<int> waiters;      // PIDs waiting for this resource
 };
 
 // IPC Channel for inter-process communication
 struct IPCChannel {
     std::string name;
-    int ownerPid;
+    int ownerPid = 0;
     std::queue<std::string> buffer;
+};
+
+// Semaphore for concurrency demo
+struct Semaphore {
+    std::string name;
+    int value = 1;
+    std::vector<int> waitQueue;    // PIDs blocked on this semaphore
 };
 
 // Console log entry for dashboard
@@ -50,6 +57,9 @@ private:
 
     // Resource management (deadlock detection)
     std::map<std::string, ResourceLock> resources;
+
+    // Semaphores
+    std::map<std::string, Semaphore> semaphores;
 
     // IPC Channels
     std::map<std::string, IPCChannel> channels;
