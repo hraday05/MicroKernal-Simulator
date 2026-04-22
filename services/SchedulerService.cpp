@@ -246,20 +246,25 @@ void SchedulerService::handleMessage(Message msg) {
         int numActive = (int)readyList.size() + 1;
         int effectiveQuantum = timeQuantum;
 
-        if (numActive == 1) {
-            effectiveQuantum = timeQuantum * 10;   // alone: 10x
-        } else if (numActive == 2) {
-            // Smart scaling based on remaining burst
-            int avgRemaining = currentRunning.remainingTime;
-            if (!readyList.empty()) avgRemaining = (avgRemaining + readyList[0].remainingTime) / 2;
-            if (avgRemaining > 100) {
-                effectiveQuantum = timeQuantum * 3;   // 3x — high burst, reduce switches
-            } else if (avgRemaining > 40) {
-                effectiveQuantum = timeQuantum * 2;   // 2x — moderate burst
+        if (algorithm == SchedulerAlgorithm::SJF || algorithm == SchedulerAlgorithm::PRIORITY) {
+            // Non-preemptive: run the selected process to completion
+            effectiveQuantum = currentRunning.remainingTime;
+        }
+        else {
+            // Round Robin: adaptive quantum based on load
+            if (numActive == 1) {
+                effectiveQuantum = timeQuantum * 10;   // alone: 10x
+            } else if (numActive == 2) {
+                int avgRemaining = currentRunning.remainingTime;
+                if (!readyList.empty()) avgRemaining = (avgRemaining + readyList[0].remainingTime) / 2;
+                if (avgRemaining > 100) {
+                    effectiveQuantum = timeQuantum * 3;   // 3x — high burst, reduce switches
+                } else if (avgRemaining > 40) {
+                    effectiveQuantum = timeQuantum * 2;   // 2x — moderate burst
+                }
+            } else if (numActive <= 4) {
+                effectiveQuantum = timeQuantum * 2;
             }
-            // else: keep base quantum — finishing soon
-        } else if (numActive <= 4) {
-            effectiveQuantum = timeQuantum * 2;
         }
 
         int runTime = (effectiveQuantum < currentRunning.remainingTime)
