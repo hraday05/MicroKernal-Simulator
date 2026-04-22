@@ -64,6 +64,23 @@ async function sendCommand(cmd) {
                 termWrite('  syslog  |  kill_service  |  help  |  clear', 'output');
             } else if (data.pid) {
                 termWrite(`  OK (PID: ${data.pid})`, 'output');
+            } else if (data.files) {
+                if (data.files.length === 0) {
+                    termWrite('  No files found in virtual_fs/', 'output');
+                } else {
+                    termWrite('  ── Virtual File System (virtual_fs/) ────────', 'system');
+                    termWrite('  Name                 Owner  Read  Write  Size', 'output');
+                    termWrite('  ─────────────────────────────────────────────', 'output');
+                    data.files.forEach(f => {
+                        const name = f.name.padEnd(20);
+                        const owner = String(f.owner).padStart(5);
+                        const r = f.readable ? ' YES' : '  NO';
+                        const w = f.writable ? '  YES' : '   NO';
+                        const sz = String(f.size) + 'B';
+                        termWrite(`  ${name} ${owner}  ${r}  ${w}  ${sz.padStart(5)}`, 'output');
+                    });
+                    termWrite(`  ── ${data.files.length} file(s) ──`, 'system');
+                }
             } else if (data.data && data.data !== 'help') {
                 termWrite(`  ${data.data}`, 'output');
             } else {

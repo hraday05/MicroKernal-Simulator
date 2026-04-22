@@ -995,8 +995,16 @@ string Kernel::executeCommand(const string& cmd) {
         addConsoleLog("info", "[MemoryService] Memory map available in visualization panel");
     }
     else if (action == "ls") {
-        result = "{\"ok\":true}";
-        addConsoleLog("info", "[FileService] File listing available in state data");
+        auto& ft = fileService.getFileTable();
+        if (ft.empty()) {
+            result = "{\"ok\":true,\"files\":[],\"data\":\"No files found\"}";
+            addConsoleLog("info", "[FileService] No files in virtual_fs/");
+        } else {
+            stringstream fss;
+            fss << "{\"ok\":true,\"files\":" << fileService.toJSON() << "}";
+            result = fss.str();
+            addConsoleLog("info", "[FileService] Listed " + to_string(ft.size()) + " files");
+        }
     }
     else if (action == "capabilities") {
         int pid = -1;
