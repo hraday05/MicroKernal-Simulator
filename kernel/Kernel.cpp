@@ -641,26 +641,38 @@ string Kernel::executeCommand(const string& cmd) {
     }
     else if (action == "alloc") {
         int pid, bytes; ss >> pid >> bytes;
-        Message msg;
-        msg.type = "memory";
-        msg.receiver = pid;              // Target PID in receiver
-        msg.data = to_string(bytes);
-        msg.capabilityToken = "CAP_MEM";
-        sendMessageAs(1, msg);           // Route through identity-safe path
-        processMessages();
-        result = "{\"ok\":true}";
-        addConsoleLog("success", "[MemoryService] Allocated memory for PID " + to_string(pid));
+        // Pre-check: does the target PID have CAP_MEM?
+        if (!securityServer.hasCapability(pid, "CAP_MEM")) {
+            result = "{\"ok\":false,\"error\":\"DENIED: PID " + to_string(pid) + " lacks CAP_MEM\"}";
+            addConsoleLog("sandbox", "[Sandbox] DENIED: PID " + to_string(pid) + " lacks CAP_MEM — memory allocation blocked");
+        } else {
+            Message msg;
+            msg.type = "memory";
+            msg.receiver = pid;
+            msg.data = to_string(bytes);
+            msg.capabilityToken = "CAP_MEM";
+            sendMessageAs(1, msg);
+            processMessages();
+            result = "{\"ok\":true}";
+            addConsoleLog("success", "[MemoryService] Allocated memory for PID " + to_string(pid));
+        }
     }
     else if (action == "free") {
         int pid; ss >> pid;
-        Message msg;
-        msg.type = "free";
-        msg.receiver = pid;              // Target PID in receiver
-        msg.data = "all";
-        sendMessageAs(1, msg);           // Route through identity-safe path
-        processMessages();
-        result = "{\"ok\":true}";
-        addConsoleLog("info", "[MemoryService] Freed memory for PID " + to_string(pid));
+        // Pre-check: does the target PID have CAP_MEM?
+        if (!securityServer.hasCapability(pid, "CAP_MEM")) {
+            result = "{\"ok\":false,\"error\":\"DENIED: PID " + to_string(pid) + " lacks CAP_MEM\"}";
+            addConsoleLog("sandbox", "[Sandbox] DENIED: PID " + to_string(pid) + " lacks CAP_MEM — memory free blocked");
+        } else {
+            Message msg;
+            msg.type = "free";
+            msg.receiver = pid;
+            msg.data = "all";
+            sendMessageAs(1, msg);
+            processMessages();
+            result = "{\"ok\":true}";
+            addConsoleLog("info", "[MemoryService] Freed memory for PID " + to_string(pid));
+        }
     }
     else if (action == "create_file") {
         string name; ss >> name;
