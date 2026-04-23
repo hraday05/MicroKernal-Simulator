@@ -430,6 +430,34 @@ void Shell::run() {
       continue;
     }
 
+    // --- TICK (timer interrupt for scheduler) ---
+    if (command == "tick") {
+      Message tickMsg;
+      tickMsg.sender = 0;
+      tickMsg.type = "interrupt";
+      tickMsg.data = "timer";
+      kernel->sendMessage(tickMsg);
+      kernel->processMessages();
+      continue;
+    }
+
+    // --- SEMAPHORE COMMANDS ---
+    if (command.find("sem_create") == 0) {
+      stringstream ss(command); string cmd, name; int value = 1;
+      ss >> cmd >> name >> value;
+      if (name.empty()) { cout << "Usage: sem_create <name> [value]\n"; continue; }
+      kernel->executeCommand(command);
+      continue;
+    }
+    if (command.find("sem_wait") == 0) {
+      kernel->executeCommand(command);
+      continue;
+    }
+    if (command.find("sem_signal") == 0) {
+      kernel->executeCommand(command);
+      continue;
+    }
+
     // ===========================================================
     //  COMMANDS THAT GO THROUGH KERNEL IPC (identity-safe)
     // ===========================================================
