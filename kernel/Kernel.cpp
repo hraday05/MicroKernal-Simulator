@@ -71,6 +71,17 @@ void Kernel::processMessages() {
             // Target PID is in msg.receiver when sent by Shell (PID 1)
             // Otherwise the sender IS the target (for self-allocation)
             int targetPid = (msg.receiver > 0) ? msg.receiver : msg.sender;
+
+            // ===== CAPABILITY PRE-CHECK on TARGET process =====
+            // Even if Shell (sender) has CAP_MEM, the TARGET process must also have it
+            if (targetPid != msg.sender && !securityServer.hasCapability(targetPid, "CAP_MEM")) {
+                OS_LockGuard lock(printMutex);
+                cout << "[Sandbox] DENIED: Target PID " << targetPid
+                     << " lacks CAP_MEM — cannot allocate/free memory for it\n";
+                sysLogger.log("[Sandbox]", "DENIED target PID " + to_string(targetPid) + " lacks CAP_MEM");
+                continue;
+            }
+
             if (processServer.processExists(targetPid)) {
                 memoryService.handleMessage(msg);
             } else {
